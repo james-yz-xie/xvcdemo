@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../types";
 import { getSession } from "../services/storage";
 import { callGemini } from "../services/gemini";
+import { FALLBACK_5W1H } from "../services/fallback";
 import { buildSummaryPrompt } from "../prompts/summary";
 import type { SummarizeRequest, SummarizeResponse } from "../types";
 
@@ -52,6 +53,23 @@ app.post("/", async (c) => {
     return c.json(summary);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Summary failed";
+
+    // Graceful fallback for quota exceeded
+    if (message.includes("429") || message.includes("quota")) {
+      const fallback = FALLBACK_5W1H[String(chapterIndex)];
+      if (fallback) {
+        const summary: SummarizeResponse = {
+          who: fallback.who,
+          what: fallback.what,
+          when: fallback.when,
+          where: fallback.where,
+          why: fallback.why,
+          how: fallback.how,
+        };
+        return c.json(summary);
+      }
+    }
+
     return c.json({ error: message }, 500);
   }
 });

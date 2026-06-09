@@ -2,7 +2,7 @@
 
 基于 YouTube 字幕，使用 Gemini AI 生成中文视频对话内容文章。
 
-🔗 **在线演示**: （部署后填写）
+🔗 **在线演示**: https://xvc-interview.xielingjiang.workers.dev
 
 ## 快速开始
 

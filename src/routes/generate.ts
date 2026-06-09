@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../types";
 import { streamGemini } from "../services/gemini";
+import { FALLBACK_ARTICLE } from "../services/fallback";
 import { saveSession } from "../services/storage";
 import { buildArticlePrompt } from "../prompts/article";
 import type { SessionContext, Chapter } from "../types";
@@ -43,37 +44,56 @@ app.post("/", async (c) => {
   // Run generation in the background so we can immediately return the Response
   const generate = async () => {
     let fullText = "";
+    let usedFallback = false;
 
     try {
       for await (const chunk of streamGemini(prompt, apiKey)) {
         fullText += chunk.text;
         await writer.write(new TextEncoder().encode(chunk.text));
       }
-
-      const chapters = parseChapters(fullText);
-      const sessionId = crypto.randomUUID();
-
-      const ctx: SessionContext = {
-        videoId,
-        subtitles,
-        requirements: parsedRequirements as never,
-        fullArticle: fullText,
-        chapters,
-        createdAt: Date.now(),
-      };
-
-      await saveSession(c.env.SESSIONS, sessionId, ctx);
-      await writer.write(
-        new TextEncoder().encode(`\n\n<!--SESSION:${sessionId}-->`)
-      );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation failed";
-      await writer.write(
-        new TextEncoder().encode(`\n\n<!--ERROR:${message}-->`)
-      );
-    } finally {
-      await writer.close();
+
+      // Graceful fallback: stream pre-generated content when quota is exceeded
+      if (message.includes("429") || message.includes("quota")) {
+        usedFallback = true;
+        fullText = FALLBACK_ARTICLE;
+
+        // Simulate streaming by yielding chunks every 40ms
+        const chunks = chunkText(fullText, 8);
+        for (const text of chunks) {
+          await writer.write(new TextEncoder().encode(text));
+          await sleep(40);
+        }
+      } else {
+        await writer.write(
+          new TextEncoder().encode(`\n\n<!--ERROR:${message}-->`)
+        );
+        await writer.close();
+        return;
+      }
     }
+
+    const chapters = parseChapters(fullText);
+    const sessionId = crypto.randomUUID();
+
+    const ctx: SessionContext = {
+      videoId,
+      subtitles,
+      requirements: parsedRequirements as never,
+      fullArticle: fullText,
+      chapters,
+      createdAt: Date.now(),
+    };
+
+    await saveSession(c.env.SESSIONS, sessionId, ctx);
+
+    const suffix = usedFallback
+      ? `\n\n<!--SESSION:${sessionId}-->\n\n<!--FALLBACK:true-->`
+      : `\n\n<!--SESSION:${sessionId}-->`;
+    await writer.write(new TextEncoder().encode(suffix));
+
+    await writer.close();
   };
 
   generate(); // intentionally not awaited
@@ -89,6 +109,18 @@ app.post("/", async (c) => {
 export default app;
 
 // ─── Helpers ────────────────────────────────────────────────
+
+function chunkText(text: string, size: number): string[] {
+  const chunks: string[] = [];
+  for (let i = 0; i < text.length; i += size) {
+    chunks.push(text.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function parseChapters(text: string): Chapter[] {
   const chapters: Chapter[] = [];
