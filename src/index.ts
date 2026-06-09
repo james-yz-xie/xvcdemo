@@ -62,19 +62,9 @@ const INDEX_HTML = `<!DOCTYPE html>
     .typing-cursor::after { content: '|'; animation: blink 1s infinite; }
     @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
     .chapter-section { position: relative; }
-    .chapter-btn {
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
+    .chapter-btn { opacity: 0; transition: opacity 0.2s; }
     .chapter-section:hover .chapter-btn { opacity: 1; }
-    .spinner {
-      border: 2px solid #e5e7eb;
-      border-top-color: #3b82f6;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      animation: spin 1s linear infinite;
-    }
+    .spinner { border: 2px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
@@ -87,24 +77,21 @@ const INDEX_HTML = `<!DOCTYPE html>
     </header>
 
     <!-- Input Form -->
-    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1.5">YouTube 视频链接</label>
-          <input
-            id="videoUrl"
-            type="text"
-            placeholder="https://www.youtube.com/watch?v=..."
+          <input id="videoUrl" type="text" placeholder="https://www.youtube.com/watch?v=..."
             class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
             value="https://www.youtube.com/watch?v=xRh2sVcNXQ8"
           >
-          <div class="mt-2 flex gap-2">
-            <button onclick="document.getElementById('videoUrl').value='https://www.youtube.com/watch?v=xRh2sVcNXQ8'" class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded px-2 py-1 transition">
-              📄 PRD 示例（硬编码字幕）
-            </button>
-            <button onclick="document.getElementById('videoUrl').value='https://www.youtube.com/watch?v=dQw4w9WgXcQ'" class="text-xs bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 rounded px-2 py-1 transition">
-              🌐 其他视频（实时提取）
-            </button>
+          <div class="mt-2 flex gap-2 flex-wrap">
+            <button onclick="setVideo('xRh2sVcNXQ8')"
+              class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded px-2 py-1 transition">📄 PRD 示例（硬编码字幕）</button>
+            <button onclick="setVideo('jfKfPfyJRdk')"
+              class="text-xs bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 rounded px-2 py-1 transition">🌐 Lofi Girl（实时提取）</button>
+            <button onclick="setVideo('dQw4w9WgXcQ')"
+              class="text-xs bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 rounded px-2 py-1 transition">🎵 Rick Astley（实时提取）</button>
           </div>
         </div>
 
@@ -121,21 +108,63 @@ const INDEX_HTML = `<!DOCTYPE html>
           </div>
         </details>
 
-        <button
-          id="generateBtn"
-          onclick="startGeneration()"
-          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition flex items-center justify-center gap-2"
-        >
-          <span id="btnText">开始生成</span>
-          <div id="btnSpinner" class="spinner hidden"></div>
-        </button>
+        <!-- Step 1: Extract Subtitles -->
+        <div class="pt-2 border-t border-slate-100">
+          <button id="extractBtn" onclick="extractSubtitles()"
+            class="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2.5 rounded-lg transition flex items-center justify-center gap-2"
+          >
+            <span id="extractBtnText">🔍 第一步：提取字幕</span>
+            <div id="extractSpinner" class="spinner hidden"></div>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Subtitle Info -->
-    <div id="subtitleInfo" class="hidden mb-4 text-sm text-slate-500 flex items-center gap-2">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      <span id="subtitleSource"></span>
+    <!-- Subtitle Result Panel -->
+    <div id="subtitlePanel" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          字幕提取结果
+        </h3>
+        <div class="flex items-center gap-2">
+          <span id="subtitleStatus" class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">等待中</span>
+          <button onclick="extractSubtitles()" class="text-xs text-blue-600 hover:text-blue-800 underline">重试</button>
+        </div>
+      </div>
+
+      <div id="subtitleProgress" class="hidden mb-3 text-sm text-slate-500 flex items-center gap-2">
+        <div class="spinner" style="width:16px;height:16px;border-width:1.5px;"></div>
+        <span id="subtitleProgressText">正在连接 YouTube...</span>
+      </div>
+
+      <div id="subtitleError" class="hidden mb-3 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></div>
+
+      <div id="subtitleSuccess" class="hidden">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-xs text-slate-500">共 <span id="subtitleLength" class="font-medium"></span> 字符</span>
+          <span id="subtitleSource" class="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600"></span>
+        </div>
+        <details class="group">
+          <summary class="text-xs text-slate-500 cursor-pointer hover:text-slate-700 select-none flex items-center gap-1">
+            <svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            查看原始字幕内容
+          </summary>
+          <div id="subtitleContent" class="mt-2 p-3 bg-slate-50 rounded-lg text-xs text-slate-600 font-mono max-h-64 overflow-y-auto whitespace-pre-wrap break-words border border-slate-200"></div>
+        </details>
+      </div>
+
+      <!-- Step 2: Generate Article -->
+      <div id="generateSection" class="hidden mt-4 pt-4 border-t border-slate-100">
+        <button id="generateBtn" onclick="generateArticle()"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition flex items-center justify-center gap-2"
+        >
+          <span id="generateBtnText">✨ 第二步：生成文章</span>
+          <div id="generateSpinner" class="spinner hidden"></div>
+        </button>
+      </div>
     </div>
 
     <!-- Article Output -->
@@ -151,68 +180,126 @@ const INDEX_HTML = `<!DOCTYPE html>
     const API_BASE = location.origin;
     let sessionId = null;
     let chapters = [];
+    let currentSubtitles = '';
+    let currentVideoId = '';
 
-    async function startGeneration() {
+    function setVideo(id) {
+      document.getElementById('videoUrl').value = 'https://www.youtube.com/watch?v=' + id;
+      // Reset panels
+      document.getElementById('subtitlePanel').classList.add('hidden');
+      document.getElementById('article').classList.add('hidden');
+      currentSubtitles = '';
+      currentVideoId = '';
+    }
+
+    async function extractSubtitles() {
       const url = document.getElementById('videoUrl').value.trim();
-      const btn = document.getElementById('generateBtn');
-      const btnText = document.getElementById('btnText');
-      const btnSpinner = document.getElementById('btnSpinner');
-      const article = document.getElementById('article');
-      const content = document.getElementById('articleContent');
-      const indicator = document.getElementById('typingIndicator');
+      const btn = document.getElementById('extractBtn');
+      const btnText = document.getElementById('extractBtnText');
+      const spinner = document.getElementById('extractSpinner');
+      const panel = document.getElementById('subtitlePanel');
+      const status = document.getElementById('subtitleStatus');
+      const progress = document.getElementById('subtitleProgress');
+      const progressText = document.getElementById('subtitleProgressText');
+      const error = document.getElementById('subtitleError');
+      const success = document.getElementById('subtitleSuccess');
+      const generateSection = document.getElementById('generateSection');
 
       if (!url) { alert('请输入 YouTube 链接'); return; }
 
       // Reset UI
       btn.disabled = true;
-      btnText.textContent = '提取字幕中...';
-      btnSpinner.classList.remove('hidden');
-      article.classList.add('hidden');
-      content.innerHTML = '';
-      sessionId = null;
-      chapters = [];
+      btnText.textContent = '提取中...';
+      spinner.classList.remove('hidden');
+      panel.classList.remove('hidden');
+      status.textContent = '提取中';
+      status.className = 'text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-600';
+      progress.classList.remove('hidden');
+      progressText.textContent = '正在连接 YouTube...';
+      error.classList.add('hidden');
+      success.classList.add('hidden');
+      generateSection.classList.add('hidden');
+      document.getElementById('article').classList.add('hidden');
+      currentSubtitles = '';
+      currentVideoId = '';
 
       try {
-        // Step 1: Extract subtitles
-        const subRes = await fetch(API_BASE + '/api/subtitles', {
+        progressText.textContent = '正在请求视频页面...';
+        const res = await fetch(API_BASE + '/api/subtitles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ videoUrl: url })
         });
-        const subData = await subRes.json();
+        const data = await res.json();
 
-        if (!subRes.ok) throw new Error(subData.error || '字幕提取失败');
+        if (!res.ok) throw new Error(data.error || '字幕提取失败');
 
-        // Show subtitle source
-        const info = document.getElementById('subtitleInfo');
-        const source = document.getElementById('subtitleSource');
-        info.classList.remove('hidden');
-        source.textContent = subData.source === 'live'
-          ? '已获取在线字幕'
-          : '使用备选字幕（YouTube 提取受限）';
+        // Success
+        currentSubtitles = data.subtitles;
+        currentVideoId = data.videoId;
 
-        // Build requirements
-        const reqs = {};
-        const task = document.getElementById('reqTask').value.trim();
-        const style = document.getElementById('reqStyle').value.trim();
-        const audience = document.getElementById('reqAudience').value.trim();
-        const constraints = document.getElementById('reqConstraints').value.trim();
-        if (task) reqs.taskType = task;
-        if (style) reqs.style = style;
-        if (audience) reqs.audience = audience;
-        if (constraints) reqs.constraints = constraints;
+        progress.classList.add('hidden');
+        status.textContent = '成功';
+        status.className = 'text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600';
 
-        btnText.textContent = 'AI 生成中...';
-        article.classList.remove('hidden');
-        indicator.classList.remove('hidden');
+        success.classList.remove('hidden');
+        document.getElementById('subtitleLength').textContent = data.subtitles.length.toLocaleString();
+        document.getElementById('subtitleSource').textContent = data.source === 'live' ? '在线提取' : '硬编码字幕';
+        document.getElementById('subtitleContent').textContent = data.subtitles;
 
-        // Step 2: Stream generation
+        // Show generate button
+        generateSection.classList.remove('hidden');
+
+      } catch (err) {
+        progress.classList.add('hidden');
+        status.textContent = '失败';
+        status.className = 'text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600';
+        error.textContent = err.message;
+        error.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btnText.textContent = '🔍 第一步：提取字幕';
+        spinner.classList.add('hidden');
+      }
+    }
+
+    async function generateArticle() {
+      const btn = document.getElementById('generateBtn');
+      const btnText = document.getElementById('generateBtnText');
+      const spinner = document.getElementById('generateSpinner');
+      const article = document.getElementById('article');
+      const content = document.getElementById('articleContent');
+      const indicator = document.getElementById('typingIndicator');
+
+      if (!currentSubtitles) { alert('请先提取字幕'); return; }
+
+      // Build requirements
+      const reqs = {};
+      const task = document.getElementById('reqTask').value.trim();
+      const style = document.getElementById('reqStyle').value.trim();
+      const audience = document.getElementById('reqAudience').value.trim();
+      const constraints = document.getElementById('reqConstraints').value.trim();
+      if (task) reqs.taskType = task;
+      if (style) reqs.style = style;
+      if (audience) reqs.audience = audience;
+      if (constraints) reqs.constraints = constraints;
+
+      btn.disabled = true;
+      btnText.textContent = '生成中...';
+      spinner.classList.remove('hidden');
+      article.classList.remove('hidden');
+      content.innerHTML = '';
+      indicator.classList.remove('hidden');
+      sessionId = null;
+      chapters = [];
+
+      try {
         const genRes = await fetch(API_BASE + '/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            videoId: subData.videoId,
-            subtitles: subData.subtitles,
+            videoId: currentVideoId,
+            subtitles: currentSubtitles,
             requirements: Object.keys(reqs).length > 0 ? JSON.stringify(reqs) : undefined
           })
         });
@@ -228,40 +315,30 @@ const INDEX_HTML = `<!DOCTYPE html>
           const chunk = decoder.decode(value, { stream: true });
           rawText += chunk;
 
-          // Parse session marker
           const sessionMatch = rawText.match(/<!--SESSION:([a-f0-9-]+)-->/);
           if (sessionMatch) {
             sessionId = sessionMatch[1];
             rawText = rawText.replace(/<!--SESSION:[a-f0-9-]+-->/, '');
           }
 
-          // Parse error marker
           const errMatch = rawText.match(/<!--ERROR:(.+?)-->/);
-          if (errMatch) {
-            throw new Error(errMatch[1]);
-          }
+          if (errMatch) { throw new Error(errMatch[1]); }
 
-          // Render markdown (strip markers first)
           const displayText = rawText.replace(/<!--.*?-->/gs, '');
           content.innerHTML = marked.parse(displayText);
-
-          // Scroll to bottom
           content.scrollIntoView({ behavior: 'smooth', block: 'end' });
         }
 
         indicator.classList.add('hidden');
-
-        // Add 5W1H buttons to each chapter heading
         add5w1hButtons(content);
 
       } catch (err) {
         indicator.classList.add('hidden');
         content.innerHTML = \`<div class="text-red-600 text-sm">错误: \${err.message}</div>\`;
-        article.classList.remove('hidden');
       } finally {
         btn.disabled = false;
-        btnText.textContent = '开始生成';
-        btnSpinner.classList.add('hidden');
+        btnText.textContent = '✨ 第二步：生成文章';
+        spinner.classList.add('hidden');
       }
     }
 
@@ -270,7 +347,6 @@ const INDEX_HTML = `<!DOCTYPE html>
       headings.forEach((h2, idx) => {
         const wrapper = document.createElement('div');
         wrapper.className = 'chapter-section flex items-center gap-3 mb-2';
-
         h2.parentNode.insertBefore(wrapper, h2);
         wrapper.appendChild(h2);
 
@@ -280,7 +356,6 @@ const INDEX_HTML = `<!DOCTYPE html>
         btn.onclick = () => toggle5w1h(idx, wrapper);
         wrapper.appendChild(btn);
 
-        // Create placeholder for 5W1H content
         const panel = document.createElement('div');
         panel.id = \`5w1h-\${idx}\`;
         panel.className = 'hidden mt-3 mb-6 bg-slate-50 rounded-lg border border-slate-200 overflow-hidden';
@@ -303,9 +378,7 @@ const INDEX_HTML = `<!DOCTYPE html>
             body: JSON.stringify({ sessionId, chapterIndex })
           });
           const data = await res.json();
-
           if (!res.ok) throw new Error(data.error || '总结失败');
-
           panel.innerHTML = render5w1hTable(data);
         } catch (err) {
           panel.innerHTML = \`<div class="p-4 text-red-600 text-sm">\${err.message}</div>\`;
@@ -324,21 +397,15 @@ const INDEX_HTML = `<!DOCTYPE html>
         { key: 'Why', value: data.why, icon: '❓' },
         { key: 'How', value: data.how, icon: '⚙️' },
       ];
-
       return \`
         <div class="fade-in">
-          <table class="w-full text-sm">
-            <tbody>
-              \${rows.map(r => \`
-                <tr class="border-b border-slate-200 last:border-0">
-                  <td class="w-20 py-3 px-4 font-semibold text-slate-700 bg-slate-100/50">\${r.icon} \${r.key}</td>
-                  <td class="py-3 px-4 text-slate-800">\${r.value}</td>
-                </tr>
-              \`).join('')}
-            </tbody>
-          </table>
-        </div>
-      \`;
+          <table class="w-full text-sm"><tbody>
+            \${rows.map(r => \`<tr class="border-b border-slate-200 last:border-0">
+              <td class="w-20 py-3 px-4 font-semibold text-slate-700 bg-slate-100/50">\${r.icon} \${r.key}</td>
+              <td class="py-3 px-4 text-slate-800">\${r.value}</td>
+            </tr>\`).join('')}
+          </tbody></table>
+        </div>\`;
     }
   </script>
 </body>
