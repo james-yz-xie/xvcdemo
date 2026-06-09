@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../types";
 import { streamGemini } from "../services/gemini";
-import { streamKimi } from "../services/kimi";
 import { FALLBACK_ARTICLE } from "../services/fallback";
 import { saveSession } from "../services/storage";
 import { buildArticlePrompt } from "../prompts/article";
@@ -38,14 +37,12 @@ app.post("/", async (c) => {
 
   const prompt = buildArticlePrompt(subtitles, parsedRequirements as never);
 
-  // Use a TransformStream for reliable chunked transfer in Workers
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
 
-  // Run generation in the background so we can immediately return the Response
   const generate = async () => {
     let fullText = "";
-    let usedFallback = false;
+    let quotaExceeded = false;
 
     try {
       for await (const chunk of streamGemini(prompt, apiKey)) {
@@ -55,27 +52,29 @@ app.post("/", async (c) => {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation failed";
 
-      // Fallback 1: try Moonshot (Kimi) when Gemini quota exceeded
       if (message.includes("429") || message.includes("quota")) {
-        const kimiKey = c.env.MOONSHOT_API_KEY;
-        if (kimiKey) {
-          try {
-            for await (const chunk of streamKimi(prompt, kimiKey)) {
-              fullText += chunk.text;
-              await writer.write(new TextEncoder().encode(chunk.text));
-            }
-            usedFallback = true;
-          } catch (moonshotErr) {
-            const m =
-              moonshotErr instanceof Error
-                ? moonshotErr.message
-                : "Moonshot failed";
-            await streamFallback(writer);
-            return;
-          }
-        } else {
-          await streamFallback(writer);
-          return;
+        quotaExceeded = true;
+
+        // Show quota-exceeded notice with instructions
+        const notice =
+          `\n\n---\n\n` +
+          `⚠️ **Gemini API 免费额度已用完**\n\n` +
+          `当前展示的是预生成的演示内容。如需实时生成，请按以下步骤获取新 API Key：\n\n` +
+          `1. 访问 [Google AI Studio](https://aistudio.google.com/api-keys)\n` +
+          `2. 点击 "Create API Key"\n` +
+          `3. 选择任意 Google 项目（或创建新项目）\n` +
+          `4. 复制生成的 Key（格式：AIza...）\n` +
+          `5. 在项目目录运行：\`npx wrangler secret put GEMINI_API_KEY\`\n\n` +
+          `---\n\n`;
+
+        await writer.write(new TextEncoder().encode(notice));
+
+        // Stream fallback demo content
+        fullText = FALLBACK_ARTICLE;
+        const chunks = chunkText(fullText, 8);
+        for (const text of chunks) {
+          await writer.write(new TextEncoder().encode(text));
+          await sleep(40);
         }
       } else {
         await writer.write(
@@ -100,15 +99,15 @@ app.post("/", async (c) => {
 
     await saveSession(c.env.SESSIONS, sessionId, ctx);
 
-    const suffix = usedFallback
-      ? `\n\n<!--SESSION:${sessionId}-->\n\n<!--FALLBACK:kimi-->`
+    const suffix = quotaExceeded
+      ? `\n\n<!--SESSION:${sessionId}-->`
       : `\n\n<!--SESSION:${sessionId}-->`;
     await writer.write(new TextEncoder().encode(suffix));
 
     await writer.close();
   };
 
-  generate(); // intentionally not awaited
+  generate();
 
   return new Response(readable, {
     headers: {
@@ -121,24 +120,6 @@ app.post("/", async (c) => {
 export default app;
 
 // ─── Helpers ────────────────────────────────────────────────
-
-async function streamFallback(
-  writer: WritableStreamDefaultWriter
-): Promise<void> {
-  // Fallback 2: pre-generated static content
-  const chunks = chunkText(FALLBACK_ARTICLE, 8);
-  for (const text of chunks) {
-    await writer.write(new TextEncoder().encode(text));
-    await sleep(40);
-  }
-  const sid = crypto.randomUUID();
-  await writer.write(
-    new TextEncoder().encode(
-      `\n\n<!--SESSION:${sid}-->\n\n<!--FALLBACK:static-->`
-    )
-  );
-  await writer.close();
-}
 
 function chunkText(text: string, size: number): string[] {
   const chunks: string[] = [];

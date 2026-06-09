@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import type { Env } from "../types";
 import { getSession } from "../services/storage";
 import { callGemini } from "../services/gemini";
-import { callKimi } from "../services/kimi";
 import { FALLBACK_5W1H } from "../services/fallback";
 import { buildSummaryPrompt } from "../prompts/summary";
 import type { SummarizeRequest, SummarizeResponse } from "../types";
@@ -55,41 +54,13 @@ app.post("/", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Summary failed";
 
-    // Fallback 1: try Kimi Code when Gemini quota exceeded
     if (message.includes("429") || message.includes("quota")) {
-      const kimiKey = c.env.MOONSHOT_API_KEY;
-      if (kimiKey) {
-        try {
-          const raw = await callKimi(prompt, kimiKey);
-          const parsed = extractJsonFromResponse(raw) as SummarizeResponse | null;
-          if (parsed) {
-            const summary: SummarizeResponse = {
-              who: parsed.who ?? "N/A",
-              what: parsed.what ?? "N/A",
-              when: parsed.when ?? "N/A",
-              where: parsed.where ?? "N/A",
-              why: parsed.why ?? "N/A",
-              how: parsed.how ?? "N/A",
-            };
-            return c.json(summary);
-          }
-        } catch {
-          // fall through to static fallback
-        }
-      }
-
-      // Fallback 2: static pre-defined content
       const fallback = FALLBACK_5W1H[String(chapterIndex)];
       if (fallback) {
-        const summary: SummarizeResponse = {
-          who: fallback.who,
-          what: fallback.what,
-          when: fallback.when,
-          where: fallback.where,
-          why: fallback.why,
-          how: fallback.how,
-        };
-        return c.json(summary);
+        return c.json({
+          ...fallback,
+          _notice: "Gemini API 免费额度已用完。请访问 https://aistudio.google.com/api-keys 获取新 Key，然后运行 npx wrangler secret put GEMINI_API_KEY",
+        });
       }
     }
 
@@ -102,7 +73,6 @@ export default app;
 // ─── Helpers ────────────────────────────────────────────────
 
 function extractJsonFromResponse(text: string): unknown {
-  // Try to find JSON object in the response, handling markdown code blocks
   const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlockMatch) {
     try {
@@ -112,7 +82,6 @@ function extractJsonFromResponse(text: string): unknown {
     }
   }
 
-  // Try raw JSON object
   const objectMatch = text.match(/\{[\s\S]*\}/);
   if (objectMatch) {
     try {

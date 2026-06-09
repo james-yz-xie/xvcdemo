@@ -80,3 +80,17 @@ npm run deploy   # 部署到 Cloudflare
    ```bash
    npm run deploy
    ```
+
+## 获取 Gemini API Key
+
+1. 访问 [Google AI Studio](https://aistudio.google.com/api-keys)
+2. 点击 **"Create API Key"**
+3. 选择任意 Google 项目（或点击 "Create API key in new project"）
+4. 复制生成的 Key（格式如 `AIza...`）
+5. 在项目目录运行：
+   ```bash
+   npx wrangler secret put GEMINI_API_KEY
+   ```
+   粘贴刚才复制的 Key 即可
+
+> **注意**: Gemini AI Studio 免费 tier 有每日请求限额（约 1500 次/天）。如果额度用完，系统会展示预生成的演示内容，并提示你更换 API Key。
