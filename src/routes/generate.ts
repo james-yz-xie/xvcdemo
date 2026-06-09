@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../types";
 import { streamGemini } from "../services/gemini";
+import { streamKimi } from "../services/kimi";
 import { FALLBACK_ARTICLE } from "../services/fallback";
 import { saveSession } from "../services/storage";
 import { buildArticlePrompt } from "../prompts/article";
@@ -54,16 +55,27 @@ app.post("/", async (c) => {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation failed";
 
-      // Graceful fallback: stream pre-generated content when quota is exceeded
+      // Fallback 1: try Moonshot (Kimi) when Gemini quota exceeded
       if (message.includes("429") || message.includes("quota")) {
-        usedFallback = true;
-        fullText = FALLBACK_ARTICLE;
-
-        // Simulate streaming by yielding chunks every 40ms
-        const chunks = chunkText(fullText, 8);
-        for (const text of chunks) {
-          await writer.write(new TextEncoder().encode(text));
-          await sleep(40);
+        const kimiKey = c.env.MOONSHOT_API_KEY;
+        if (kimiKey) {
+          try {
+            for await (const chunk of streamKimi(prompt, kimiKey)) {
+              fullText += chunk.text;
+              await writer.write(new TextEncoder().encode(chunk.text));
+            }
+            usedFallback = true;
+          } catch (moonshotErr) {
+            const m =
+              moonshotErr instanceof Error
+                ? moonshotErr.message
+                : "Moonshot failed";
+            await streamFallback(writer);
+            return;
+          }
+        } else {
+          await streamFallback(writer);
+          return;
         }
       } else {
         await writer.write(
@@ -89,7 +101,7 @@ app.post("/", async (c) => {
     await saveSession(c.env.SESSIONS, sessionId, ctx);
 
     const suffix = usedFallback
-      ? `\n\n<!--SESSION:${sessionId}-->\n\n<!--FALLBACK:true-->`
+      ? `\n\n<!--SESSION:${sessionId}-->\n\n<!--FALLBACK:kimi-->`
       : `\n\n<!--SESSION:${sessionId}-->`;
     await writer.write(new TextEncoder().encode(suffix));
 
@@ -109,6 +121,24 @@ app.post("/", async (c) => {
 export default app;
 
 // ─── Helpers ────────────────────────────────────────────────
+
+async function streamFallback(
+  writer: WritableStreamDefaultWriter
+): Promise<void> {
+  // Fallback 2: pre-generated static content
+  const chunks = chunkText(FALLBACK_ARTICLE, 8);
+  for (const text of chunks) {
+    await writer.write(new TextEncoder().encode(text));
+    await sleep(40);
+  }
+  const sid = crypto.randomUUID();
+  await writer.write(
+    new TextEncoder().encode(
+      `\n\n<!--SESSION:${sid}-->\n\n<!--FALLBACK:static-->`
+    )
+  );
+  await writer.close();
+}
 
 function chunkText(text: string, size: number): string[] {
   const chunks: string[] = [];

@@ -84,6 +84,7 @@ export type SseEvent = SseChunkEvent | SseDoneEvent | SseErrorEvent;
 export interface Env {
   Bindings: {
     GEMINI_API_KEY: string;
+    MOONSHOT_API_KEY: string;
     SESSIONS: KVNamespace;
     ASSETS?: Fetcher;
   };
