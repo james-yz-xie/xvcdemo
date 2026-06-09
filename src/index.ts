@@ -98,6 +98,14 @@ const INDEX_HTML = `<!DOCTYPE html>
             class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
             value="https://www.youtube.com/watch?v=xRh2sVcNXQ8"
           >
+          <div class="mt-2 flex gap-2">
+            <button onclick="document.getElementById('videoUrl').value='https://www.youtube.com/watch?v=xRh2sVcNXQ8'" class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded px-2 py-1 transition">
+              📄 PRD 示例（硬编码字幕）
+            </button>
+            <button onclick="document.getElementById('videoUrl').value='https://www.youtube.com/watch?v=dQw4w9WgXcQ'" class="text-xs bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 rounded px-2 py-1 transition">
+              🌐 其他视频（实时提取）
+            </button>
+          </div>
         </div>
 
         <details class="group">
