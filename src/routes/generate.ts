@@ -40,15 +40,19 @@ app.post("/", async (c) => {
   const writer = writable.getWriter();
 
   const generate = async () => {
+    console.log("[generate] start", { videoId, promptLength: prompt.length });
     let fullText = "";
 
     try {
+      console.log("[generate] calling Gemini stream...");
       for await (const chunk of streamGemini(prompt, apiKey)) {
         fullText += chunk.text;
         await writer.write(new TextEncoder().encode(chunk.text));
       }
+      console.log("[generate] Gemini stream complete, text length:", fullText.length);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation failed";
+      console.error("[generate] Gemini error:", message);
       await writer.write(
         new TextEncoder().encode(`\n\n<!--ERROR:${message}-->`)
       );
@@ -56,8 +60,10 @@ app.post("/", async (c) => {
       return;
     }
 
+    console.log("[generate] parsing chapters...");
     const chapters = parseChapters(fullText);
     const sessionId = crypto.randomUUID();
+    console.log("[generate] chapters:", chapters.length, "session:", sessionId);
 
     const ctx: SessionContext = {
       videoId,
@@ -73,6 +79,7 @@ app.post("/", async (c) => {
       new TextEncoder().encode(`\n\n<!--SESSION:${sessionId}-->`)
     );
     await writer.close();
+    console.log("[generate] done");
   };
 
   generate();

@@ -180,6 +180,8 @@ const INDEX_HTML = `<!DOCTYPE html>
     const API_BASE = location.origin;
     let sessionId = null;
     let chapters = [];
+      let timeoutId;
+      const TIMEOUT_MS = 30000;
     let currentSubtitles = '';
     let currentVideoId = '';
 
@@ -307,12 +309,22 @@ const INDEX_HTML = `<!DOCTYPE html>
         const reader = genRes.body.getReader();
         const decoder = new TextDecoder();
         let rawText = '';
+        let hasReceivedData = false;
+
+        // Timeout guard
+        timeoutId = setTimeout(() => {
+          if (!hasReceivedData) {
+            content.innerHTML = \`<div class="text-amber-600 text-sm">⏱ 已等待 30 秒，后台仍未返回数据。可能是 API Key 额度耗尽或网络超时。</div>\`;
+          }
+        }, TIMEOUT_MS);
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
+          hasReceivedData = true;
+          clearTimeout(timeoutId);
           rawText += chunk;
 
           const sessionMatch = rawText.match(/<!--SESSION:([a-f0-9-]+)-->/);
@@ -321,7 +333,7 @@ const INDEX_HTML = `<!DOCTYPE html>
             rawText = rawText.replace(/<!--SESSION:[a-f0-9-]+-->/, '');
           }
 
-          const errMatch = rawText.match(/<!--ERROR:(.+?)-->/);
+          const errMatch = rawText.match(/<!--ERROR:([\s\S]+?)-->/);
           if (errMatch) { throw new Error(errMatch[1]); }
 
           const displayText = rawText.replace(/<!--.*?-->/gs, '');
@@ -329,13 +341,21 @@ const INDEX_HTML = `<!DOCTYPE html>
           content.scrollIntoView({ behavior: 'smooth', block: 'end' });
         }
 
+        clearTimeout(timeoutId);
+
+        // Final check for trailing error marker
+        const finalErrMatch = rawText.match(/<!--ERROR:([\s\S]+?)-->/);
+        if (finalErrMatch) { throw new Error(finalErrMatch[1]); }
+
         indicator.classList.add('hidden');
         add5w1hButtons(content);
 
       } catch (err) {
+        clearTimeout(timeoutId);
         indicator.classList.add('hidden');
-        content.innerHTML = \`<div class="text-red-600 text-sm">错误: \${err.message}</div>\`;
+        content.innerHTML = \`<div class="text-red-600 text-sm">❌ 错误: \${err.message}</div>\`;
       } finally {
+        clearTimeout(timeoutId);
         btn.disabled = false;
         btnText.textContent = '✨ 第二步：生成文章';
         spinner.classList.add('hidden');
