@@ -43,7 +43,7 @@ async function fetchLiveSubtitles(videoId: string): Promise<string> {
 
   const html = await pageRes.text();
 
-  const match = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});\s*</);
+  const match = html.match(/ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\});\s*<\/script>/);
   if (!match) throw new Error("无法获取视频播放器信息");
 
   const playerResponse = JSON.parse(match[1]) as PlayerResponse;
