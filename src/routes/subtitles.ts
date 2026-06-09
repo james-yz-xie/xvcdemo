@@ -13,15 +13,20 @@ app.post("/", async (c) => {
     return c.json({ error: "Invalid YouTube URL" }, 400);
   }
 
-  const result = await fetchSubtitles(videoId);
+  try {
+    const subtitles = await fetchSubtitles(videoId);
 
-  const response: SubtitlesResponse = {
-    videoId,
-    subtitles: result.text,
-    source: result.source,
-  };
+    const response: SubtitlesResponse = {
+      videoId,
+      subtitles,
+      source: "live",
+    };
 
-  return c.json(response);
+    return c.json(response);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "字幕提取失败";
+    return c.json({ error: message }, 500);
+  }
 });
 
 export default app;
