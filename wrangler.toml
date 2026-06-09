@@ -1,0 +1,8 @@
+name = "xvc-interview"
+main = "src/index.ts"
+compatibility_date = "2024-06-01"
+
+# KV namespace for storing generation sessions
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "your-kv-namespace-id-here"
