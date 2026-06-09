@@ -318,6 +318,17 @@ const INDEX_HTML = `<!DOCTYPE html>
           }
         }, TIMEOUT_MS);
 
+        let pendingText = '';
+        let renderPending = false;
+        
+        const flushRender = () => {
+          renderPending = false;
+          const displayText = rawText.replace(/<!--.*?-->/gs, '');
+          if (displayText.trim()) {
+            content.innerHTML = marked.parse(displayText);
+          }
+        };
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -336,10 +347,18 @@ const INDEX_HTML = `<!DOCTYPE html>
           const errMatch = rawText.match(/<!--ERROR:([\s\S]+?)-->/);
           if (errMatch) { throw new Error(errMatch[1]); }
 
-          const displayText = rawText.replace(/<!--.*?-->/gs, '');
-          content.innerHTML = marked.parse(displayText);
-          content.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          // Throttle rendering: batch updates every 80ms
+          pendingText = rawText;
+          if (!renderPending) {
+            renderPending = true;
+            requestAnimationFrame(() => {
+              setTimeout(flushRender, 80);
+            });
+          }
         }
+        
+        // Final flush
+        if (renderPending) flushRender();
 
         clearTimeout(timeoutId);
 
