@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../types";
 import { getSession } from "../services/storage";
 import { callGemini } from "../services/gemini";
+import { FALLBACK_5W1H } from "../services/fallback";
 import { buildSummaryPrompt } from "../prompts/summary";
 import type { SummarizeRequest, SummarizeResponse } from "../types";
 
@@ -52,6 +53,17 @@ app.post("/", async (c) => {
     return c.json(summary);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Summary failed";
+    console.error("[summarize] Gemini error:", message);
+
+    // Return fallback 5W1H for demo continuity
+    const fallback = FALLBACK_5W1H[String(chapterIndex)];
+    if (fallback) {
+      return c.json({
+        ...fallback,
+        _notice: "演示数据 — Gemini API 暂不可用",
+      });
+    }
+
     return c.json({ error: message }, 500);
   }
 });
