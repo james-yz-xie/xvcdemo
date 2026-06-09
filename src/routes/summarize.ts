@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import type { Env } from "../types";
 import { getSession } from "../services/storage";
 import { callGemini } from "../services/gemini";
-import { FALLBACK_5W1H } from "../services/fallback";
 import { buildSummaryPrompt } from "../prompts/summary";
 import type { SummarizeRequest, SummarizeResponse } from "../types";
 
@@ -53,24 +52,11 @@ app.post("/", async (c) => {
     return c.json(summary);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Summary failed";
-
-    if (message.includes("429") || message.includes("quota")) {
-      const fallback = FALLBACK_5W1H[String(chapterIndex)];
-      if (fallback) {
-        return c.json({
-          ...fallback,
-          _notice: "Gemini API 免费额度已用完。请访问 https://aistudio.google.com/api-keys 获取新 Key，然后运行 npx wrangler secret put GEMINI_API_KEY",
-        });
-      }
-    }
-
     return c.json({ error: message }, 500);
   }
 });
 
 export default app;
-
-// ─── Helpers ────────────────────────────────────────────────
 
 function extractJsonFromResponse(text: string): unknown {
   const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
