@@ -1,0 +1,50 @@
+###
+# XVC Interview API — REST Client Demo
+# 安装 VS Code "REST Client" 插件后，点击每段请求上方的 "Send Request" 即可测试
+###
+
+@baseUrl = http://localhost:8787
+@videoUrl = https://www.youtube.com/watch?v=xRh2sVcNXQ8
+
+### 1. Health Check
+GET {{baseUrl}}/health
+
+### 2. Extract YouTube Subtitles
+# 纯网络爬取，无需 API Key
+POST {{baseUrl}}/api/subtitles
+Content-Type: application/json
+
+{
+  "videoUrl": "{{videoUrl}}"
+}
+
+### 3. Stream Generate Article
+# 流式输出，Response 为 chunked text/plain
+# 需配置有效的 GEMINI_API_KEY（.dev.vars 或 wrangler secret）
+POST {{baseUrl}}/api/generate
+Content-Type: application/json
+
+{
+  "videoId": "xRh2sVcNXQ8",
+  "subtitles": "Marc Andreessen discusses AI revenue models and cost curves with Ben Horowitz."
+}
+
+### 4. Stream Generate with Requirements
+POST {{baseUrl}}/api/generate
+Content-Type: application/json
+
+{
+  "videoId": "xRh2sVcNXQ8",
+  "subtitles": "Marc Andreessen discusses AI revenue models and cost curves with Ben Horowitz.",
+  "requirements": "{\"taskType\":\"深度分析\",\"style\":\"正式\",\"audience\":\"投资人\"}"
+}
+
+### 5. Summarize Chapter 5W1H
+# 先执行 generate 获取返回的 sessionId，替换下方 {{sessionId}}
+POST {{baseUrl}}/api/summarize
+Content-Type: application/json
+
+{
+  "sessionId": "replace-with-session-id-from-generate-response",
+  "chapterIndex": 0
+}
