@@ -19,22 +19,24 @@ export function extractVideoId(url: string): string | null {
 }
 
 /** Fetch subtitles for a video.
- *  Falls back to hard-coded transcript when live extraction fails
- *  (PRD recommendation: YouTube caption extraction is unstable).
+ *  Hard-coded transcripts are returned instantly (PRD recommendation).
+ *  Falls back to live extraction only when no hard-coded data exists.
  */
 export async function fetchSubtitles(videoId: string): Promise<string> {
+  // 1. Return hard-coded immediately if available — zero latency
+  const fallback = getHardcodedSubtitles(videoId);
+  if (fallback) {
+    return fallback;
+  }
+
+  // 2. Otherwise attempt live extraction
   try {
     const live = await fetchLiveSubtitles(videoId);
     if (live.trim().length >= 100) {
       return live;
     }
   } catch {
-    // fall through to hard-coded fallback
-  }
-
-  const fallback = getHardcodedSubtitles(videoId);
-  if (fallback) {
-    return fallback;
+    // fall through
   }
 
   throw new Error(
