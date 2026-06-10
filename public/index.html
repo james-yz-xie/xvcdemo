@@ -117,7 +117,7 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
                 class="px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
                 <option value="gemini" selected>🌐 Gemini 2.0 Flash（云端）</option>
                 <option value="kimi">🌙 Kimi Code（Moonshot）</option>
-                <option value="lmstudio" class="lmstudio-option">💻 LM Studio（本地）</option>
+                <option value="lmstudio">💻 LM Studio（本地）</option>
               </select>
               <select id="generateModeSelect"
                 class="px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
@@ -167,10 +167,7 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
     let currentSubtitles = '';
     let currentVideoId = '';
 
-    // Hide LM Studio option on deployed domain (localhost only)
-    if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-      document.querySelectorAll('.lmstudio-option').forEach(opt => opt.remove());
-    }
+
 
     function setVideo(id) {
       document.getElementById('videoUrl').value = 'https://www.youtube.com/watch?v=' + id;
@@ -470,28 +467,25 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
             nextEl = nextEl.nextElementSibling;
           }
 
-          let res, data;
+          let data;
           if (sessionId === 'lmstudio-session') {
-            // LM Studio mode: send article content directly
-            res = await fetch(API_BASE + '/api/summarize-local', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                fullArticle: document.getElementById('articleContent').textContent,
-                title: title,
-                content: chapterContent.trim()
-              })
-            });
+            // LM Studio mode: direct browser call to localhost
+            data = await callLMStudio5w1h(
+              document.getElementById('articleContent').textContent,
+              title,
+              chapterContent.trim()
+            );
+            if (!data) throw new Error('无法解析 LM Studio 返回的 JSON');
           } else {
             const cloudModel = document.getElementById('generateModelSelect').value;
-            res = await fetch(API_BASE + '/api/summarize', {
+            const res = await fetch(API_BASE + '/api/summarize', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ sessionId, chapterIndex, model: cloudModel })
             });
+            data = await res.json();
+            if (!res.ok) throw new Error(data.error || '总结失败');
           }
-          data = await res.json();
-          if (!res.ok) throw new Error(data.error || '总结失败');
           panel.innerHTML = render5w1hTable(data);
         } catch (err) {
           panel.innerHTML = '<div class="p-4 text-red-600 text-sm">' + err.message + '</div>';
@@ -560,6 +554,64 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
         }
       }
       return fullText;
+    }
+
+    async function callLMStudio5w1h(fullArticle, title, content) {
+      const reqBlock = [
+        '你是一位专业编辑。请基于以下视频完整文章和当前章节，提炼出该章节的 5W1H 总结。',
+        '',
+        '## 完整文章内容',
+        fullArticle.slice(0, 8000),
+        '',
+        '## 当前章节',
+        '标题：' + title,
+        '内容：' + content,
+        '',
+        '## 输出要求',
+        '1. 请只输出一个纯 JSON 对象，不要包含 markdown 代码块标记（如 ```json），不要添加任何额外文字、解释或前言。',
+        '2. JSON 必须严格符合以下格式，键名必须是 who/what/when/where/why/how，不能有任何其他字段：',
+        '',
+        '{"who":"...","what":"...","when":"...","where":"...","why":"...","how":"..."}',
+        '',
+        '3. 每个字段简洁凝练，一句话概括，不超过 80 字。',
+        '4. 如果某个维度在章节中确实没有体现，可以填写\"未明确提及\"，但不能省略该字段。'
+      ].join('\n');
+
+      const res = await fetch('http://localhost:1234/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer not-needed' },
+        body: JSON.stringify({
+          model: 'gemma-4-26b-a4b-it',
+          messages: [{ role: 'user', content: reqBlock }],
+          temperature: 0.5,
+          max_tokens: 2048,
+          stream: false
+        })
+      });
+
+      if (!res.ok) throw new Error('LM Studio error: ' + res.status);
+
+      const data = await res.json();
+      const raw = data.choices?.[0]?.message?.content || '';
+      return extractJsonFromResponse(raw);
+    }
+
+    function extractJsonFromResponse(text) {
+      const trimmed = text.trim();
+
+      const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        try { return JSON.parse(codeBlockMatch[1].trim()); } catch {}
+      }
+
+      const objectMatch = trimmed.match(/\{[\s\S]*?\}/);
+      if (objectMatch) {
+        try { return JSON.parse(objectMatch[0]); } catch {}
+      }
+
+      try { return JSON.parse(trimmed); } catch {}
+
+      return null;
     }
 
     function render5w1hTable(data) {
