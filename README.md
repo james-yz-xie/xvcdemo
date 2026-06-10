@@ -178,7 +178,7 @@ src/
 ├── services/
 │   ├── youtube.ts        # YouTube 字幕解析
 │   ├── llm.ts            # Gemini/Kimi 调用
-│   ├── lmstudio.ts       # LM Studio 调用
+
 │   ├── storage.ts        # KV 读写
 │   └── fallback.ts       # 演示数据兜底
 ├── data/

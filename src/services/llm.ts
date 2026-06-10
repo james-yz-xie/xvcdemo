@@ -1,19 +1,17 @@
 // ─────────────────────────────────────────────────────────────
-// LLM router — supports Gemini (cloud), LM Studio (local), or Kimi
+// LLM router — supports Gemini (cloud) and Kimi
+// LM Studio is handled directly by the frontend
 // ─────────────────────────────────────────────────────────────
 
 import { streamGemini, callGemini } from "./gemini";
-import { streamLMStudio, callLMStudio } from "./lmstudio";
 import { streamKimi, callKimi } from "./kimi";
 
 export interface LLMStreamChunk {
   text: string;
 }
 
-function detectProvider(apiKey: string, model?: string): "gemini" | "lmstudio" | "kimi" {
+function detectProvider(_apiKey: string, model?: string): "gemini" | "kimi" {
   if (model === "kimi") return "kimi";
-  if (model === "lmstudio") return "lmstudio";
-  if (apiKey.startsWith("lm-") || apiKey === "local" || apiKey === "") return "lmstudio";
   return "gemini";
 }
 
@@ -26,9 +24,6 @@ export async function* streamLLM(
   const provider = detectProvider(apiKey, model);
 
   switch (provider) {
-    case "lmstudio":
-      yield* streamLMStudio(prompt);
-      break;
     case "kimi":
       yield* streamKimi(prompt, apiKey);
       break;
@@ -46,8 +41,6 @@ export async function callLLM(
   const provider = detectProvider(apiKey, model);
 
   switch (provider) {
-    case "lmstudio":
-      return callLMStudio(prompt);
     case "kimi":
       return callKimi(prompt, apiKey);
     default:
