@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // Fallback article for demo when Gemini API is unavailable
-// Extracted from sample_output.md
+// AUTO-GENERATED from sample_output.md — do not edit manually
+// Run: node scripts/sync-sample.js
 // ─────────────────────────────────────────────────────────────
 
 export const FALLBACK_ARTICLE = `# 对话安德森：AI革命的万亿美金之问

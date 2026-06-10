@@ -13,6 +13,7 @@ export interface GenerationRequirements {
 /** POST /api/subtitles */
 export interface SubtitlesRequest {
   videoUrl: string;
+  forceLive?: boolean;
 }
 
 export interface SubtitlesResponse {
@@ -32,6 +33,7 @@ export interface GenerateQuery {
 export interface SummarizeRequest {
   sessionId: string;
   chapterIndex: number;
+  model?: string;
 }
 
 export interface SummarizeResponse {
@@ -84,6 +86,7 @@ export type SseEvent = SseChunkEvent | SseDoneEvent | SseErrorEvent;
 export interface Env {
   Bindings: {
     GEMINI_API_KEY: string;
+    KIMI_API_KEY?: string;
     SESSIONS: KVNamespace;
     ASSETS?: Fetcher;
   };

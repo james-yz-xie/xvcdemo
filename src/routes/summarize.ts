@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../types";
 import { getSession } from "../services/storage";
-import { callGemini } from "../services/gemini";
+import { callLLM } from "../services/llm";
 import { FALLBACK_5W1H } from "../services/fallback";
 import { buildSummaryPrompt } from "../prompts/summary";
 import type { SummarizeRequest, SummarizeResponse } from "../types";
@@ -10,15 +10,20 @@ const app = new Hono<Env>();
 
 app.post("/", async (c) => {
   const body = await c.req.json<SummarizeRequest>();
-  const { sessionId, chapterIndex } = body;
+  const { sessionId, chapterIndex, model } = body;
 
   if (!sessionId || chapterIndex == null) {
     return c.json({ error: "Missing sessionId or chapterIndex" }, 400);
   }
 
-  const apiKey = c.env.GEMINI_API_KEY;
+  let apiKey = c.env.GEMINI_API_KEY;
+  if (model === 'lmstudio') {
+    apiKey = 'lm-local';
+  } else if (model === 'kimi') {
+    apiKey = c.env.KIMI_API_KEY ?? '';
+  }
   if (!apiKey) {
-    return c.json({ error: "Gemini API key not configured" }, 500);
+    return c.json({ error: "API key not configured" }, 500);
   }
 
   const session = await getSession(c.env.SESSIONS, sessionId);
@@ -34,7 +39,7 @@ app.post("/", async (c) => {
   const prompt = buildSummaryPrompt(session.fullArticle, chapter);
 
   try {
-    const raw = await callGemini(prompt, apiKey);
+    const raw = await callLLM(prompt, apiKey, model);
     const parsed = extractJsonFromResponse(raw) as SummarizeResponse | null;
 
     if (!parsed) {

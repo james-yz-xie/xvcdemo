@@ -14,12 +14,13 @@ app.post("/", async (c) => {
   }
 
   try {
-    const subtitles = await fetchSubtitles(videoId);
+    const forceLive = body.forceLive === true;
+    const result = await fetchSubtitles(videoId, forceLive);
 
     const response: SubtitlesResponse = {
       videoId,
-      subtitles,
-      source: "live",
+      subtitles: result.text,
+      source: result.source,
     };
 
     return c.json(response);

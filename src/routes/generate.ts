@@ -1,10 +1,13 @@
 import { Hono } from "hono";
 import type { Env } from "../types";
-import { streamGemini } from "../services/gemini";
+import { streamLLM } from "../services/llm";
 import { FALLBACK_ARTICLE } from "../services/fallback";
 import { saveSession } from "../services/storage";
 import { buildArticlePrompt } from "../prompts/article";
 import type { SessionContext, Chapter } from "../types";
+
+/** Demo video ID from PRD — uses hardcoded article, no network call */
+const DEMO_VIDEO_ID = "xRh2sVcNXQ8";
 
 const app = new Hono<Env>();
 
@@ -13,17 +16,13 @@ app.post("/", async (c) => {
     videoId: string;
     subtitles: string;
     requirements?: string;
+    model?: string;
   }>();
 
-  const { videoId, subtitles, requirements } = body;
+  const { videoId, subtitles, requirements, model } = body;
 
   if (!videoId || !subtitles) {
     return c.json({ error: "Missing videoId or subtitles" }, 400);
-  }
-
-  const apiKey = c.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return c.json({ error: "Gemini API key not configured" }, 500);
   }
 
   let parsedRequirements: Record<string, string> | undefined;
@@ -35,43 +34,51 @@ app.post("/", async (c) => {
     }
   }
 
-  const prompt = buildArticlePrompt(subtitles, parsedRequirements as never);
-
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
 
   const generate = async () => {
-    console.log("[generate] start", { videoId, promptLength: prompt.length });
     let fullText = "";
     let usedFallback = false;
 
-    try {
-      console.log("[generate] calling Gemini stream...");
-      for await (const chunk of streamGemini(prompt, apiKey)) {
-        fullText += chunk.text;
-        await writer.write(new TextEncoder().encode(chunk.text));
-      }
-      console.log("[generate] Gemini stream complete, text length:", fullText.length);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Generation failed";
-      console.error("[generate] Gemini error:", message);
-
-      // Stream fallback content to preserve UX
-      usedFallback = true;
+    if (model === 'demo') {
       fullText = FALLBACK_ARTICLE;
+      usedFallback = true;
+      // Send all at once — frontend controls typing pace
+      await writer.write(new TextEncoder().encode(fullText));
+    } else {
+      let apiKey = c.env.GEMINI_API_KEY;
+      if (model === 'lmstudio') {
+        apiKey = 'lm-local';
+      } else if (model === 'kimi') {
+        apiKey = c.env.KIMI_API_KEY ?? '';
+      }
+      if (!apiKey) {
+        await writer.write(new TextEncoder().encode("<!--ERROR:API key not configured-->"));
+        await writer.close();
+        return;
+      }
 
-      // Simulate streaming by yielding chunks every 30ms
-      const chunks = chunkText(fullText, 6);
-      for (const text of chunks) {
-        await writer.write(new TextEncoder().encode(text));
-        await sleep(30);
+      const prompt = buildArticlePrompt(subtitles, parsedRequirements as never);
+      try {
+        for await (const chunk of streamLLM(prompt, apiKey, model)) {
+          fullText += chunk.text;
+          await writer.write(new TextEncoder().encode(chunk.text));
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Generation failed";
+        usedFallback = true;
+        fullText = FALLBACK_ARTICLE;
+        const chunks = chunkText(fullText, 6);
+        for (const text of chunks) {
+          await writer.write(new TextEncoder().encode(text));
+          await sleep(30);
+        }
       }
     }
 
-    console.log("[generate] parsing chapters...");
     const chapters = parseChapters(fullText);
     const sessionId = crypto.randomUUID();
-    console.log("[generate] chapters:", chapters.length, "session:", sessionId);
 
     const ctx: SessionContext = {
       videoId,
@@ -89,7 +96,6 @@ app.post("/", async (c) => {
       : `\n\n<!--SESSION:${sessionId}-->`;
     await writer.write(new TextEncoder().encode(suffix));
     await writer.close();
-    console.log("[generate] done");
   };
 
   generate();
@@ -103,8 +109,6 @@ app.post("/", async (c) => {
 });
 
 export default app;
-
-// ─── Helpers ────────────────────────────────────────────────
 
 function chunkText(text: string, size: number): string[] {
   const chunks: string[] = [];
@@ -121,7 +125,6 @@ function sleep(ms: number): Promise<void> {
 function parseChapters(text: string): Chapter[] {
   const chapters: Chapter[] = [];
   const headingRe = /^##\s+(.+)$/gm;
-
   const matches: Array<{ title: string; index: number }> = [];
   let match;
 
@@ -131,12 +134,9 @@ function parseChapters(text: string): Chapter[] {
 
   for (let i = 0; i < matches.length; i++) {
     const start = matches[i].index;
-    const end =
-      i + 1 < matches.length ? matches[i + 1].index : text.length;
-
+    const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
     const block = text.slice(start, end).trim();
     const content = block.replace(/^##\s+.+\n?/, "").trim();
-
     chapters.push({ title: matches[i].title, content });
   }
 

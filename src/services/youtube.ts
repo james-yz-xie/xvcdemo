@@ -18,29 +18,36 @@ export function extractVideoId(url: string): string | null {
   return null;
 }
 
+export interface SubtitleResult {
+  text: string;
+  source: "fallback" | "live";
+}
+
 /** Fetch subtitles for a video.
  *  Hard-coded transcripts are returned instantly (PRD recommendation).
  *  Falls back to live extraction only when no hard-coded data exists.
  */
-export async function fetchSubtitles(videoId: string): Promise<string> {
+export async function fetchSubtitles(videoId: string, forceLive = false): Promise<SubtitleResult> {
   // 1. Return hard-coded immediately if available — zero latency
-  const fallback = getHardcodedSubtitles(videoId);
-  if (fallback) {
-    return fallback;
+  if (!forceLive) {
+    const fallback = getHardcodedSubtitles(videoId);
+    if (fallback) {
+      return { text: fallback, source: "fallback" };
+    }
   }
 
   // 2. Otherwise attempt live extraction
   try {
     const live = await fetchLiveSubtitles(videoId);
     if (live.trim().length >= 100) {
-      return live;
+      return { text: live, source: "live" };
     }
   } catch {
     // fall through
   }
 
   throw new Error(
-    "该视频暂无可用字幕。请尝试其他 YouTube 视频，或使用 PRD 示例视频: https://www.youtube.com/watch?v=xRh2sVcNXQ8"
+    "该视频暂无可用字幕。YouTube 目前对自动化字幕提取做了限制，大多数视频无法获取字幕。请使用下方「📄 PRD 示例（Demo 模式）」按钮体验完整功能。"
   );
 }
 
