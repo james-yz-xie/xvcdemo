@@ -117,7 +117,7 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
                 class="px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
                 <option value="gemini" selected>🌐 Gemini 2.0 Flash（云端）</option>
                 <option value="kimi">🌙 Kimi Code（Moonshot）</option>
-                <option value="lmstudio">💻 LM Studio（本地）</option>
+                <option value="lmstudio" class="lmstudio-option">💻 LM Studio（本地）</option>
               </select>
               <select id="generateModeSelect"
                 class="px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
@@ -166,6 +166,11 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
     const TIMEOUT_MS = 30000;
     let currentSubtitles = '';
     let currentVideoId = '';
+
+    // Hide LM Studio option on deployed domain (localhost only)
+    if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      document.querySelectorAll('.lmstudio-option').forEach(opt => opt.remove());
+    }
 
     function setVideo(id) {
       document.getElementById('videoUrl').value = 'https://www.youtube.com/watch?v=' + id;
