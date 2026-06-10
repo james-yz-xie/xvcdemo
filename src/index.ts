@@ -3,7 +3,6 @@ import type { Env } from "./types";
 import subtitles from "./routes/subtitles";
 import generate from "./routes/generate";
 import summarize from "./routes/summarize";
-import summarizeLocal from "./routes/summarize-local";
 
 // ─────────────────────────────────────────────────────────────
 // Hono app — XVC AI Article Generator
@@ -31,7 +30,6 @@ app.get("/health", (c) => c.json({ ok: true }));
 app.route("/api/subtitles", subtitles);
 app.route("/api/generate", generate);
 app.route("/api/summarize", summarize);
-app.route("/api/summarize-local", summarizeLocal);
 
 // Serve frontend from public/ via [assets] in wrangler.toml
 app.get("/", async (c) => {

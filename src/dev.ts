@@ -5,7 +5,6 @@ import { config } from "dotenv";
 import subtitles from "./routes/subtitles";
 import generate from "./routes/generate";
 import summarize from "./routes/summarize";
-import summarizeLocal from "./routes/summarize-local";
 
 config({ path: ".dev.vars" });
 
@@ -41,7 +40,6 @@ app.get("/health", (c) => c.json({ ok: true }));
 app.route("/api/subtitles", subtitles);
 app.route("/api/generate", generate);
 app.route("/api/summarize", summarize);
-app.route("/api/summarize-local", summarizeLocal);
 
 // Serve static files from public/ (after API routes)
 app.use("/*", serveStatic({ root: "./public" }));

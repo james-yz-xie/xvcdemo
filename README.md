@@ -137,17 +137,14 @@ headings.forEach((h2, idx) => {
 
 #### LM Studio 本地流程
 
-由于 LM Studio 是前端直连，没有服务端 session。因此专门设计了 `/api/summarize-local` 端点，前端直接提交完整文章、章节标题和章节内容：
+LM Studio 完全走前端直连 `http://localhost:1234/v1/chat/completions`，无需服务端 session。5W1H 总结时，前端直接构造 prompt 并调用本地模型，解析返回的 JSON：
 
 ```javascript
-res = await fetch('/api/summarize-local', {
-  method: 'POST',
-  body: JSON.stringify({
-    fullArticle: document.getElementById('articleContent').textContent,
-    title,
-    content: chapterContent.trim()
-  })
-});
+data = await callLMStudio5w1h(
+  document.getElementById('articleContent').textContent,
+  title,
+  chapterContent.trim()
+);
 ```
 
 #### Prompt 设计
@@ -177,7 +174,7 @@ src/
 │   ├── subtitles.ts      # YouTube 字幕提取
 │   ├── generate.ts       # 流式文章生成
 │   ├── summarize.ts      # 云端 5W1H
-│   └── summarize-local.ts # LM Studio 5W1H
+
 ├── services/
 │   ├── youtube.ts        # YouTube 字幕解析
 │   ├── llm.ts            # Gemini/Kimi 调用
@@ -209,7 +206,6 @@ public/
 | `/api/subtitles` | POST | 提取 YouTube 字幕 |
 | `/api/generate` | POST | 流式生成文章 |
 | `/api/summarize` | POST | 云端模型章节 5W1H |
-| `/api/summarize-local` | POST | LM Studio 章节 5W1H |
 
 ## 部署
 
