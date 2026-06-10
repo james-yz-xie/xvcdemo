@@ -59,8 +59,8 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
             <div class="flex items-center gap-2">
               <select id="extractModelSelect"
                 class="px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                <option value="live" selected>🌐 实时提取（YouTube）</option>
                 <option value="demo">🎬 Demo 硬编码</option>
-                <option value="live">🌐 实时提取（YouTube）</option>
               </select>
               <button id="extractBtn" onclick="extractSubtitles()"
                 class="bg-slate-800 hover:bg-slate-900 text-white font-medium px-4 py-1.5 rounded-lg transition flex items-center gap-2 text-sm"
@@ -115,14 +115,14 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
             <div class="flex items-center gap-2 flex-wrap justify-end">
               <select id="generateModelSelect"
                 class="px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                <option value="lmstudio">💻 LM Studio（本地）</option>
-                <option value="gemini">🌐 Gemini 2.0 Flash（云端）</option>
+                <option value="gemini" selected>🌐 Gemini 2.0 Flash（云端）</option>
                 <option value="kimi">🌙 Kimi Code（Moonshot）</option>
+                <option value="lmstudio">💻 LM Studio（本地）</option>
               </select>
               <select id="generateModeSelect"
                 class="px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                <option value="live" selected>✨ AI 实时生成</option>
                 <option value="demo">📄 Demo 硬编码</option>
-                <option value="live">✨ AI 实时生成</option>
               </select>
               <button id="generateBtn" onclick="generateArticle()"
                 class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-1.5 rounded-lg transition flex items-center gap-2 text-sm"
