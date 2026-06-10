@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { HARDCODED_SUBTITLES } from "../data/subtitles";
+import { fetchViaProxy } from "./proxy";
 
 /** Extract video ID from any YouTube URL format */
 export function extractVideoId(url: string): string | null {
@@ -36,9 +37,19 @@ export async function fetchSubtitles(videoId: string, forceLive = false): Promis
     }
   }
 
-  // 2. Otherwise attempt live extraction
+  // 2. Attempt direct live extraction
   try {
     const live = await fetchLiveSubtitles(videoId);
+    if (live.trim().length >= 100) {
+      return { text: live, source: "live" };
+    }
+  } catch {
+    // fall through to proxy attempt
+  }
+
+  // 3. Attempt via webshare.io proxy (PRD recommendation)
+  try {
+    const live = await fetchLiveSubtitlesViaProxy(videoId);
     if (live.trim().length >= 100) {
       return { text: live, source: "live" };
     }
@@ -68,7 +79,28 @@ async function fetchLiveSubtitles(videoId: string): Promise<string> {
   );
 
   const html = await pageRes.text();
+  return extractAndParseSubtitles(html, false);
+}
 
+async function fetchLiveSubtitlesViaProxy(videoId: string): Promise<string> {
+  const pageRes = await fetchViaProxy(
+    `https://www.youtube.com/watch?v=${videoId}`,
+    {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    }
+  );
+
+  const html = await pageRes.text();
+  return extractAndParseSubtitles(html, true);
+}
+
+async function extractAndParseSubtitles(html: string, useProxy = false): Promise<string> {
   const jsonText = extractYtJson(html);
   if (!jsonText) throw new Error("无法获取视频播放器信息");
 
@@ -81,12 +113,20 @@ async function fetchLiveSubtitles(videoId: string): Promise<string> {
 
   const track = tracks.find((t) => t.languageCode === "en") ?? tracks[0];
 
-  const transcriptRes = await fetch(track.baseUrl, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-    },
-  });
+  // Fetch transcript XML — try proxy if requested
+  const transcriptRes = useProxy
+    ? await fetchViaProxy(track.baseUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        },
+      })
+    : await fetch(track.baseUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        },
+      });
 
   const xml = await transcriptRes.text();
   return parseTranscriptXml(xml);

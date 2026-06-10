@@ -1,4 +1,17 @@
 // ─────────────────────────────────────────────────────────────
+// Cloudflare Workers runtime extensions
+// ─────────────────────────────────────────────────────────────
+
+declare global {
+  function connect(address: { hostname: string; port: number }): {
+    readable: ReadableStream<any>;
+    writable: WritableStream<any>;
+    startTls(options: { expectedServerHostname: string }): any;
+    closed: Promise<void>;
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Shared domain types
 // ─────────────────────────────────────────────────────────────
 
