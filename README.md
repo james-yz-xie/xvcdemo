@@ -175,9 +175,9 @@ data = await callLMStudio5w1h(
 │  │                     public/index.html (单文件前端)                   │    │
 │  │  • 字幕提取: 调用 /api/subtitles                                    │    │
 │  │  • 云端生成: 调用 /api/generate (ReadableStream 实时渲染)            │    │
+│  │  • 云端 5W1H: 调用 /api/summarize (仅传 sessionId + chapterIndex)   │    │
 │  │  • LM Studio 生成: 直连 http://localhost:1234/v1/chat/completions   │    │
 │  │  • LM Studio 5W1H:  直连 localhost 构造 prompt 并解析 JSON          │    │
-│  │  • 云端 5W1H: 调用 /api/summarize (仅传 sessionId + chapterIndex)   │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
@@ -265,11 +265,95 @@ public/
 
 ## API 端点
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/subtitles` | POST | 提取 YouTube 字幕 |
-| `/api/generate` | POST | 流式生成文章 |
-| `/api/summarize` | POST | 云端模型章节 5W1H |
+### `POST /api/subtitles`
+
+提取 YouTube 视频字幕。
+
+**请求体：**
+
+```json
+{
+  "videoId": "dQw4w9WgXcQ"
+}
+```
+
+**响应体：**
+
+```json
+{
+  "videoId": "dQw4w9WgXcQ",
+  "subtitles": "完整字幕文本...",
+  "source": "youtube" // 或 "fallback"（硬编码备选）
+}
+```
+
+---
+
+### `POST /api/generate`
+
+流式生成文章。返回 `text/plain` 流，前端逐段读取渲染。
+
+**请求体：**
+
+```json
+{
+  "videoId": "dQw4w9WgXcQ",
+  "subtitles": "完整字幕文本...",
+  "requirements": "{\"style\":\"幽默\",\"audience\":\"投资人\"}",
+  "model": "gemini" // 或 "kimi"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `videoId` | string | 是 | YouTube 视频 ID |
+| `subtitles` | string | 是 | 提取到的字幕文本 |
+| `requirements` | string | 否 | 用户生成要求，JSON 字符串 |
+| `model` | string | 否 | 模型选择：`gemini` / `kimi`，默认 `gemini` |
+
+**流式响应：**
+
+普通 chunk 直接返回文本内容。流末尾可能包含以下标记：
+
+- `<!--SESSION:uuid-->` — 服务端生成的 session ID，用于后续 5W1H 查询
+- `<!--ERROR:message-->` — 服务端错误信息
+
+---
+
+### `POST /api/summarize`
+
+基于服务端 KV 缓存的上下文，生成指定章节的 5W1H 总结。
+
+**请求体：**
+
+```json
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "chapterIndex": 2,
+  "model": "gemini"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `sessionId` | string | 是 | `/api/generate` 返回的 session ID |
+| `chapterIndex` | number | 是 | 章节索引，从 0 开始 |
+| `model` | string | 否 | 模型选择：`gemini` / `kimi`，默认 `gemini` |
+
+**响应体：**
+
+```json
+{
+  "who": "涉及的人物或主体",
+  "what": "核心内容或事件",
+  "when": "时间点或时间段",
+  "where": "地点、市场或领域",
+  "why": "原因或驱动力",
+  "how": "实现方式或运作机制"
+}
+```
+
+> **为什么用 KV？** `/api/generate` 生成文章时把 `fullArticle` + `chapters` 存入 Cloudflare KV（TTL 24 小时）。`/api/summarize` 只接收轻量的 `sessionId` 和 `chapterIndex`，从 KV 读取完整上下文后调用 LLM。这样既符合"不重复提交大文本"的设计约束，又能保护 API Key 不暴露给前端。
 
 ## 部署
 
