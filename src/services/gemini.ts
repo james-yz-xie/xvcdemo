@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// Gemini API service — streaming & non-streaming
+// Gemini API service — streaming & non-streaming with multi-key rotation
 // ─────────────────────────────────────────────────────────────
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -9,59 +9,82 @@ export interface GeminiStreamChunk {
   text: string;
 }
 
+function parseKeys(apiKey: string): string[] {
+  return apiKey
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+}
+
 /** Stream content from Gemini via Server-Sent Events style parsing */
 export async function* streamGemini(
   prompt: string,
   apiKey: string
 ): AsyncGenerator<GeminiStreamChunk> {
-  const url = `${GEMINI_BASE}/${MODEL}:streamGenerateContent?key=${apiKey}`;
+  const keys = parseKeys(apiKey);
+  if (keys.length === 0) throw new Error("Gemini API key not configured");
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 8192,
-      },
-    }),
-  });
+  let lastError = "unknown";
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    try {
+      const url = `${GEMINI_BASE}/${MODEL}:streamGenerateContent?key=${key}`;
 
-  if (!res.ok) {
-    const err = await res.text().catch(() => "unknown");
-    throw new Error(`Gemini API error ${res.status}: ${err}`);
-  }
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 8192,
+          },
+        }),
+      });
 
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error("No response body from Gemini");
+      if (res.status === 429) {
+        const err = await res.text().catch(() => "rate limited");
+        lastError = `Gemini API 429: ${err}`;
+        continue; // try next key
+      }
 
-  const decoder = new TextDecoder();
-  let buffer = "";
+      if (!res.ok) {
+        const err = await res.text().catch(() => "unknown");
+        throw new Error(`Gemini API error ${res.status}: ${err}`);
+      }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body from Gemini");
 
-    buffer += decoder.decode(value, { stream: true });
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-    // Gemini streaming returns JSON objects separated by commas and wrapped in brackets.
-    // We extract individual JSON chunks by scanning for balanced objects.
-    const chunks = extractJsonObjects(buffer);
-    buffer = chunks.remainder;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-    for (const obj of chunks.objects) {
-      const text = extractTextFromGeminiChunk(obj);
-      if (text) yield { text };
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = extractJsonObjects(buffer);
+        buffer = chunks.remainder;
+
+        for (const obj of chunks.objects) {
+          const text = extractTextFromGeminiChunk(obj);
+          if (text) yield { text };
+        }
+      }
+
+      const chunks = extractJsonObjects(buffer);
+      for (const obj of chunks.objects) {
+        const text = extractTextFromGeminiChunk(obj);
+        if (text) yield { text };
+      }
+      return;
+    } catch (err) {
+      if (i === keys.length - 1) throw err;
+      lastError = err instanceof Error ? err.message : String(err);
     }
   }
-
-  // Flush final buffer
-  const chunks = extractJsonObjects(buffer);
-  for (const obj of chunks.objects) {
-    const text = extractTextFromGeminiChunk(obj);
-    if (text) yield { text };
-  }
+  throw new Error(`All Gemini API keys exhausted. Last error: ${lastError}`);
 }
 
 /** Non-streaming call for 5W1H summary */
@@ -69,29 +92,40 @@ export async function callGemini(
   prompt: string,
   apiKey: string
 ): Promise<string> {
-  const url = `${GEMINI_BASE}/${MODEL}:generateContent?key=${apiKey}`;
+  const keys = parseKeys(apiKey);
+  if (keys.length === 0) throw new Error("Gemini API key not configured");
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.5,
-        maxOutputTokens: 1024,
-      },
-    }),
-  });
+  let lastError = "unknown";
+  for (const key of keys) {
+    const url = `${GEMINI_BASE}/${MODEL}:generateContent?key=${key}`;
 
-  if (!res.ok) {
-    const err = await res.text().catch(() => "unknown");
-    throw new Error(`Gemini API error ${res.status}: ${err}`);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: 1024,
+        },
+      }),
+    });
+
+    if (res.status === 429) {
+      const err = await res.text().catch(() => "rate limited");
+      lastError = `Gemini API 429: ${err}`;
+      continue;
+    }
+
+    if (!res.ok) {
+      const err = await res.text().catch(() => "unknown");
+      throw new Error(`Gemini API error ${res.status}: ${err}`);
+    }
+
+    const data = (await res.json()) as GeminiResponse;
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   }
-
-  const data = await res.json() as GeminiResponse;
-  return (
-    data.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
-  );
+  throw new Error(`All Gemini API keys exhausted. Last error: ${lastError}`);
 }
 
 // ─── Helpers ────────────────────────────────────────────────

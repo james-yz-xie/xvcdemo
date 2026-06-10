@@ -374,6 +374,17 @@ public/
    npx wrangler secret put KIMI_API_KEY
    ```
 
+   **Gemini 支持多 Key 轮询**：如果拥有多个 Gemini API Key，可以用逗号分隔存储，遇到 429 会自动切换下一个 Key：
+   ```bash
+   npx wrangler secret put GEMINI_API_KEY
+   # 输入：key1,key2,key3
+   ```
+
+   本地开发时，在 `.dev.vars` 中同样支持逗号分隔：
+   ```
+   GEMINI_API_KEY=key1,key2,key3
+   ```
+
 4. 部署:
    ```bash
    npm run deploy
@@ -385,4 +396,4 @@ public/
 - **Kimi**: [Moonshot 开放平台](https://platform.moonshot.cn/)
 - **LM Studio**: 本地运行后在设置中开启 API 服务器，默认端口 `1234`
 
-> **注意**: Gemini AI Studio 免费 tier 有每日请求限额。如果额度用完，可切换到 Kimi 或 LM Studio。
+> **注意**: Gemini AI Studio 免费 tier 有每日/每分钟请求限额，容易触发 429。系统已内置多 Key 轮询机制，建议配置 2-3 个 Key 提升面试演示稳定性。如果所有 Key 额度都用完，可切换到 Kimi 或 LM Studio。
