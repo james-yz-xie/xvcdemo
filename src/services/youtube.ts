@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { HARDCODED_SUBTITLES } from "../data/subtitles";
-import { fetchViaProxy } from "./proxy";
+import { fetchYoutubeTranscript } from "./firecrawl";
 
 /** Extract video ID from any YouTube URL format */
 export function extractVideoId(url: string): string | null {
@@ -31,7 +31,7 @@ export interface SubtitleResult {
 export async function fetchSubtitles(
   videoId: string,
   forceLive = false,
-  scraperApiKey?: string
+  firecrawlKey?: string
 ): Promise<SubtitleResult> {
   // 1. Return hard-coded immediately if available — zero latency
   if (!forceLive) {
@@ -48,12 +48,12 @@ export async function fetchSubtitles(
       return { text: live, source: "live" };
     }
   } catch {
-    // fall through to proxy attempt
+    // fall through to Firecrawl attempt
   }
 
-  // 3. Attempt via ScraperAPI proxy
+  // 3. Attempt via Firecrawl (extracts YouTube transcript from markdown)
   try {
-    const live = await fetchLiveSubtitlesViaProxy(videoId, scraperApiKey);
+    const live = await fetchLiveSubtitlesViaFirecrawl(videoId, firecrawlKey);
     if (live.trim().length >= 100) {
       return { text: live, source: "live" };
     }
@@ -83,29 +83,7 @@ async function fetchLiveSubtitles(videoId: string): Promise<string> {
   );
 
   const html = await pageRes.text();
-  return extractAndParseSubtitles(html, false);
-}
 
-async function fetchLiveSubtitlesViaProxy(videoId: string, apiKey?: string): Promise<string> {
-  const pageRes = await fetchViaProxy(
-    `https://www.youtube.com/watch?v=${videoId}`,
-    {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    },
-    apiKey
-  );
-
-  const html = await pageRes.text();
-  return extractAndParseSubtitles(html, true);
-}
-
-async function extractAndParseSubtitles(html: string, useProxy = false): Promise<string> {
   const jsonText = extractYtJson(html);
   if (!jsonText) throw new Error("无法获取视频播放器信息");
 
@@ -118,23 +96,19 @@ async function extractAndParseSubtitles(html: string, useProxy = false): Promise
 
   const track = tracks.find((t) => t.languageCode === "en") ?? tracks[0];
 
-  // Fetch transcript XML — try proxy if requested
-  const transcriptRes = useProxy
-    ? await fetchViaProxy(track.baseUrl, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        },
-      })
-    : await fetch(track.baseUrl, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        },
-      });
+  const transcriptRes = await fetch(track.baseUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    },
+  });
 
   const xml = await transcriptRes.text();
   return parseTranscriptXml(xml);
+}
+
+async function fetchLiveSubtitlesViaFirecrawl(videoId: string, apiKey?: string): Promise<string> {
+  if (!apiKey) throw new Error("Firecrawl API key required");
+  return fetchYoutubeTranscript(videoId, apiKey);
 }
 
 /** Extract ytInitialPlayerResponse JSON using brace counting */

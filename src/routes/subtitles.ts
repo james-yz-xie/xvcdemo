@@ -15,8 +15,8 @@ app.post("/", async (c) => {
 
   try {
     const forceLive = body.forceLive === true;
-    const scraperKey = c.env.SCRAPERAPI_KEY;
-    const result = await fetchSubtitles(videoId, forceLive, scraperKey);
+    const firecrawlKey = c.env.FIRECRAWL_KEY;
+    const result = await fetchSubtitles(videoId, forceLive, firecrawlKey);
 
     const response: SubtitlesResponse = {
       videoId,

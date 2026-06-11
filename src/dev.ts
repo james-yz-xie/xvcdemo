@@ -16,7 +16,7 @@ app.use("/*", async (c, next) => {
   c.env = {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
     KIMI_API_KEY: process.env.KIMI_API_KEY || "",
-    SCRAPERAPI_KEY: process.env.SCRAPERAPI_KEY || "",
+    FIRECRAWL_KEY: process.env.FIRECRAWL_KEY || "",
     SESSIONS: {
       put: async (key: string, value: string) => { kvStore.set(key, value); },
       get: async (key: string) => kvStore.get(key) || null,

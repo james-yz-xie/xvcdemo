@@ -100,7 +100,7 @@ export interface Env {
   Bindings: {
     GEMINI_API_KEY: string;
     KIMI_API_KEY?: string;
-    SCRAPERAPI_KEY?: string;
+    FIRECRAWL_KEY?: string;
     SESSIONS: KVNamespace;
     ASSETS?: Fetcher;
   };
