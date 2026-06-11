@@ -6,9 +6,6 @@ import { saveSession } from "../services/storage";
 import { buildArticlePrompt } from "../prompts/article";
 import type { SessionContext, Chapter } from "../types";
 
-/** Demo video ID from PRD — uses hardcoded article, no network call */
-const DEMO_VIDEO_ID = "xRh2sVcNXQ8";
-
 const app = new Hono<Env>();
 
 app.post("/", async (c) => {
@@ -39,12 +36,9 @@ app.post("/", async (c) => {
 
   const generate = async () => {
     let fullText = "";
-    let usedFallback = false;
 
     if (model === 'demo') {
       fullText = FALLBACK_ARTICLE;
-      usedFallback = true;
-      // Send all at once — frontend controls typing pace
       await writer.write(new TextEncoder().encode(fullText));
     } else {
       let apiKey = c.env.GEMINI_API_KEY;
@@ -67,13 +61,9 @@ app.post("/", async (c) => {
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Generation failed";
-        usedFallback = true;
-        fullText = FALLBACK_ARTICLE;
-        const chunks = chunkText(fullText, 6);
-        for (const text of chunks) {
-          await writer.write(new TextEncoder().encode(text));
-          await sleep(30);
-        }
+        await writer.write(new TextEncoder().encode(`\n\n<!--ERROR:${message}-->`));
+        await writer.close();
+        return;
       }
     }
 
@@ -91,9 +81,7 @@ app.post("/", async (c) => {
 
     await saveSession(c.env.SESSIONS, sessionId, ctx);
 
-    const suffix = usedFallback
-      ? `\n\n<!--SESSION:${sessionId}-->\n\n<!--FALLBACK:true-->`
-      : `\n\n<!--SESSION:${sessionId}-->`;
+    const suffix = `\n\n<!--SESSION:${sessionId}-->`;
     await writer.write(new TextEncoder().encode(suffix));
     await writer.close();
   };
@@ -109,18 +97,6 @@ app.post("/", async (c) => {
 });
 
 export default app;
-
-function chunkText(text: string, size: number): string[] {
-  const chunks: string[] = [];
-  for (let i = 0; i < text.length; i += size) {
-    chunks.push(text.slice(i, i + size));
-  }
-  return chunks;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function parseChapters(text: string): Chapter[] {
   const chapters: Chapter[] = [];
