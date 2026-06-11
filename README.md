@@ -17,29 +17,28 @@ npm run deploy   # 部署到 Cloudflare Workers
 ```
 GEMINI_API_KEY=your_gemini_key
 KIMI_API_KEY=your_kimi_key
+FIRECRAWL_KEY=your_firecrawl_key
 ```
 
 ## 功能特性
 
-- **YouTube 字幕提取**: 自动解析视频字幕，支持硬编码备选字幕
+- **YouTube 字幕提取**: 支持 Firecrawl 代理提取、直接请求、硬编码备选三档 fallback
 - **多模型文章生成**: 支持 Gemini、Kimi、LM Studio（本地）三种模型
 - **流式实时输出**: 文章逐字显示，无需等待全部生成完成
 - **生成要求自定义**: 任务类型、输出风格、目标受众、约束条件直接影响生成结果
 - **章节级 5W1H 总结**: 点击章节标题旁的按钮，生成结构化总结
 - **双模式运行**: Demo 模式使用预生成文章，AI 模式调用真实模型
+- **Gemini 多 Key 轮询**: 自动切换 key 避免 429 中断
 
 ## 技术实现
 
 ### 1. YouTube 字幕获取
 
-实现位于 `src/services/youtube.ts`：
+实现位于 `src/services/youtube.ts`，三层 fallback 策略：
 
-1. 从 YouTube 页面 HTML 中提取 `ytInitialPlayerResponse` JSON
-2. 解析 `captions.playerCaptionsTracklistRenderer.captionTracks` 获取字幕 URL
-3. Fetch 字幕 XML（通常是 TTML 或 SBV 格式）
-4. 通过正则去除 XML 标签和时间戳，合并为纯文本段落
-
-由于 YouTube 反爬机制，直接请求经常返回验证码页面。因此实现了**硬编码备选字幕**机制：当自动提取失败时，自动回退到 `src/data/subtitles.ts` 中预置的 PRD 示例视频字幕，保证功能稳定可用。
+1. **直接请求 YouTube** — 解析 `ytInitialPlayerResponse` 获取字幕 URL
+2. **Firecrawl 代理** — 通过 Firecrawl API 抓取页面 markdown，提取 `## Transcript` 章节
+3. **硬编码备选字幕** — 预置 PRD 示例视频字幕，零延迟兜底
 
 ```typescript
 // src/services/youtube.ts
@@ -47,6 +46,12 @@ const playerResponse = extractYtInitialPlayerResponse(html);
 const tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
 const subtitleUrl = tracks.find(t => t.languageCode === 'zh' || t.languageCode === 'en')?.baseUrl;
 ```
+
+**Firecrawl 集成** (`src/services/firecrawl.ts`)：
+- 调用 `https://api.firecrawl.dev/v2/scrape` 获取页面 markdown
+- 解析 `## Transcript` 章节提取字幕
+- 过滤 `NaN / NaN` 等无效内容
+- 请求超时 60 秒（前端）
 
 ### 2. 流式输出实现
 
@@ -81,7 +86,20 @@ while (true) {
 
 前端直接调用 `http://localhost:1234/v1/chat/completions`，绕过服务端，减少延迟。通过 SSE 协议解析每个 `data:` 帧，实时更新 DOM。
 
-### 3. 生成要求影响输出
+### 3. Gemini 多 Key 轮询
+
+`src/services/gemini.ts` 支持逗号分隔的多个 API Key：
+
+```bash
+npx wrangler secret put GEMINI_API_KEY
+# 输入：key1,key2,key3
+```
+
+遇到 429 自动切换下一个 key，直到所有 key 都失败才报错。
+
+> ⚠️ **注意**：同一 Google 账号下的多个 key 共享免费额度池。rotate 只对**不同账号**的 key 有效。
+
+### 4. 生成要求影响输出
 
 用户在界面输入的任务类型、风格、受众、约束条件被收集为 JSON：
 
@@ -96,9 +114,11 @@ if (constraints) reqs.constraints = constraints;
 Prompt 构建器 `src/prompts/article.ts` 将其格式化为 `## 用户生成要求` 区块，并放在 prompt 最前面、用严厉措辞强调必须遵守：
 
 ```
-你是一位资深中文科技内容编辑。请严格根据以下要求撰写文章。
+【系统指令】你是一位资深中文科技内容编辑。你的唯一任务是按照以下用户要求撰写文章。
 
-## 用户生成要求（必须严格遵守，违者视为不合格）
+【重要】用户生成要求具有最高优先级，必须严格遵守。
+
+## 用户生成要求（最高优先级指令 — 必须严格遵守）
 - 任务类型：...
 - 输出风格：...
 - 目标受众：...
@@ -109,10 +129,11 @@ Prompt 构建器 `src/prompts/article.ts` 将其格式化为 `## 用户生成要
 
 ## 输出要求
 1. ...
-7. 如果上方存在「用户生成要求」，你必须在内容中明确体现这些要求，不能忽略。
+7. 必须严格遵守上方的「用户生成要求」。
+8. 在输出文章前，先自检：是否违反了用户生成要求？
 ```
 
-### 4. 章节级 5W1H 总结
+### 5. 章节级 5W1H 总结
 
 #### 文章结构解析
 
@@ -194,8 +215,8 @@ data = await callLMStudio5w1h(
 │  │         ▼                 ▼                       ▼                 │    │
 │  │  ┌─────────────┐   ┌─────────────┐        ┌─────────────┐          │    │
 │  │  │ youtube.ts  │   │  llm.ts     │        │ storage.ts  │          │    │
-│  │  │ 解析 YouTube│   │ Gemini/Kimi │        │ KV Session  │          │    │
-│  │  │ 字幕 XML    │   │ 路由网关    │        │ 上下文缓存  │          │    │
+│  │  │ Firecrawl   │   │ Gemini/Kimi │        │ KV Session  │          │    │
+│  │  │ 字幕提取    │   │ 路由网关    │        │ 上下文缓存  │          │    │
 │  │  └─────────────┘   └─────────────┘        └─────────────┘          │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                             │
@@ -203,7 +224,8 @@ data = await callLMStudio5w1h(
 │  │  Cloudflare KV  │  │ 外部 API                                        │   │
 │  │  (SESSIONS)     │  │  • Google Gemini API                            │   │
 │  │  存储生成上下文  │  │  • Moonshot Kimi API                            │   │
-│  └─────────────────┘  └─────────────────────────────────────────────────┘   │
+│  └─────────────────┘  │  • Firecrawl API (YouTube 字幕)                 │   │
+│                       └─────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -224,7 +246,7 @@ data = await callLMStudio5w1h(
 2. **云端模型统一走后端**：避免暴露 API Key，利用 Worker 做流式转发
 3. **本地模型完全走前端**：LM Studio 无需公网暴露，延迟最低，不消耗 Cloudflare CPU 时间
 4. **5W1H 上下文服务端缓存**：生成文章时存入 KV，总结时只传索引，避免重复上传大文本
-5. **字幕提取兜底**：YouTube 反爬时自动回退到硬编码字幕，保证演示稳定性
+5. **字幕提取三档 fallback**：直接请求 → Firecrawl 代理 → 硬编码兜底
 
 ## 工程架构
 
@@ -241,8 +263,10 @@ src/
 │   ├── generate.ts       # 流式文章生成
 │   └── summarize.ts      # 云端 5W1H
 ├── services/
-│   ├── youtube.ts        # YouTube 字幕解析
-│   ├── llm.ts            # Gemini/Kimi 调用
+│   ├── youtube.ts        # YouTube 字幕解析 (三档 fallback)
+│   ├── firecrawl.ts      # Firecrawl API 代理
+│   ├── llm.ts            # Gemini/Kimi 路由网关
+│   ├── gemini.ts         # Gemini API (多 key 轮询)
 │   ├── storage.ts        # KV 读写
 │   └── fallback.ts       # 演示数据兜底
 ├── data/
@@ -259,9 +283,11 @@ public/
 | 单文件 HTML 前端 | 零构建、简洁、部署即走 |
 | Hono 框架 | 轻量、类型安全、Cloudflare 官方推荐 |
 | Cloudflare KV | 配置极简，对笔试场景足够 |
-| 硬编码备选字幕 | 保证功能稳定，不因 YouTube 反爬而挂 |
+| Firecrawl 代理 | 绕过 YouTube 反爬，比 TCP Socket 更简单可靠 |
+| 硬编码备选字幕 | 保证功能稳定，不因 YouTube 反爬或 Firecrawl 限制而挂 |
 | 前端直连 LM Studio | 本地模型无需暴露到公网，延迟最低 |
 | 服务端缓存上下文 | 5W1H 不重复提交大段文本，符合 PRD 约束 |
+| Gemini 多 Key 轮询 | 提升免费 tier 演示稳定性 |
 
 ## API 端点
 
@@ -273,9 +299,15 @@ public/
 
 ```json
 {
-  "videoId": "dQw4w9WgXcQ"
+  "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "forceLive": false
 }
 ```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `videoUrl` | string | 是 | YouTube 视频完整 URL |
+| `forceLive` | boolean | 否 | 是否强制实时提取（true=跳过硬编码） |
 
 **响应体：**
 
@@ -283,7 +315,7 @@ public/
 {
   "videoId": "dQw4w9WgXcQ",
   "subtitles": "完整字幕文本...",
-  "source": "youtube" // 或 "fallback"（硬编码备选）
+  "source": "live" // 或 "fallback"（硬编码备选）
 }
 ```
 
@@ -316,7 +348,7 @@ public/
 普通 chunk 直接返回文本内容。流末尾可能包含以下标记：
 
 - `<!--SESSION:uuid-->` — 服务端生成的 session ID，用于后续 5W1H 查询
-- `<!--ERROR:message-->` — 服务端错误信息
+- `<!--ERROR:message-->` — 服务端错误信息（如 API 429 额度耗尽）
 
 ---
 
@@ -372,6 +404,7 @@ public/
    ```bash
    npx wrangler secret put GEMINI_API_KEY
    npx wrangler secret put KIMI_API_KEY
+   npx wrangler secret put FIRECRAWL_KEY
    ```
 
    **Gemini 支持多 Key 轮询**：如果拥有多个 Gemini API Key，可以用逗号分隔存储，遇到 429 会自动切换下一个 Key：
@@ -383,6 +416,7 @@ public/
    本地开发时，在 `.dev.vars` 中同样支持逗号分隔：
    ```
    GEMINI_API_KEY=key1,key2,key3
+   FIRECRAWL_KEY=your_firecrawl_key
    ```
 
 4. 部署:
@@ -394,6 +428,14 @@ public/
 
 - **Gemini**: [Google AI Studio](https://aistudio.google.com/api-keys)
 - **Kimi**: [Moonshot 开放平台](https://platform.moonshot.cn/)
+- **Firecrawl**: [Firecrawl](https://www.firecrawl.dev/)
 - **LM Studio**: 本地运行后在设置中开启 API 服务器，默认端口 `1234`
 
-> **注意**: Gemini AI Studio 免费 tier 有每日/每分钟请求限额，容易触发 429。系统已内置多 Key 轮询机制，建议配置 2-3 个 Key 提升面试演示稳定性。如果所有 Key 额度都用完，可切换到 Kimi 或 LM Studio。
+> **注意**: Gemini AI Studio 免费 tier 有每日/每分钟请求限额，容易触发 429。系统已内置多 Key 轮询机制，但**同一 Google 账号下的多个 key 共享额度池**。建议配置 **不同 Google 账号** 的 key，或面试前创建全新项目获取新 key。如果所有 Key 额度都用完，可切换到 **LM Studio（本地，最稳定）** 或 **Kimi**。
+
+## 面试演示建议
+
+1. **优先使用 LM Studio**：本地模型无额度限制，指令遵循能力通常更强
+2. **字幕提取用 Demo 模式**：零延迟，最稳定
+3. **实时提取作为技术亮点提及**：说明 Firecrawl 代理 + 三档 fallback 的设计
+4. **Gemini 仅作备选**：提前检查额度，或准备全新 key
