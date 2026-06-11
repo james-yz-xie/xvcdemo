@@ -18,6 +18,8 @@ export async function fetchYoutubeTranscript(
     body: JSON.stringify({
       url: `https://www.youtube.com/watch?v=${videoId}`,
       formats: ["markdown"],
+      onlyMainContent: false,
+      waitFor: 5000,
     }),
   });
 
@@ -28,6 +30,15 @@ export async function fetchYoutubeTranscript(
 
   const data = (await res.json()) as FirecrawlResponse;
   const markdown = data.data?.markdown ?? "";
+
+  // Debug: log markdown structure
+  console.log("[firecrawl] markdown length:", markdown.length);
+  console.log("[firecrawl] has Transcript:", markdown.includes("## Transcript"));
+  const txPos = markdown.indexOf("## Transcript");
+  console.log("[firecrawl] Transcript at:", txPos);
+  if (txPos > 0) {
+    console.log("[firecrawl] context before tx:", markdown.slice(Math.max(0, txPos-200), txPos));
+  }
 
   // Extract transcript section from markdown
   const transcript = extractTranscriptFromMarkdown(markdown);
@@ -50,6 +61,12 @@ function extractTranscriptFromMarkdown(md: string): string {
   const nextH2 = transcript.search(/\n##\s/);
   if (nextH2 !== -1) {
     transcript = transcript.slice(0, nextH2).trim();
+  }
+
+  // Check for invalid transcript (Firecrawl sometimes returns "NaN / NaN")
+  if (transcript.includes("NaN / NaN") || transcript.startsWith("[")) {
+    // This is likely a recommendation video list, not a transcript
+    return "";
   }
 
   // Clean up: Firecrawl returns each phrase on a new line
