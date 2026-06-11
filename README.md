@@ -2,7 +2,7 @@
 
 基于 YouTube 字幕，使用大语言模型生成中文视频对话内容文章，支持章节级 5W1H 总结。
 
-🔥 **在线演示**: https://xvc-interview.xielingjiang.workers.dev
+🔥 **在线演示**: https://xvc-interview.xielingjiang.workers.dev | https://duyou.me/agents/youtube-subtitles
 
 ## 快速开始
 
