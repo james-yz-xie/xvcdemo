@@ -217,14 +217,21 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
       currentVideoId = '';
 
       try {
-        progressText.textContent = '正在请求视频页面...';
+        progressText.textContent = '正在请求视频页面（可能需要 20-30 秒）...';
         const extractMode = document.getElementById('extractModelSelect').value;
         console.log('Extract mode:', extractMode, 'forceLive:', extractMode === 'live');
+
+        // Create AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
         const res = await fetch(API_BASE + '/api/subtitles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoUrl: url, forceLive: extractMode === 'live' })
+          body: JSON.stringify({ videoUrl: url, forceLive: extractMode === 'live' }),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
         console.log('Response status:', res.status);
         const data = await res.json();
         console.log('Response status:', res.status, 'data:', data);
@@ -254,7 +261,11 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
         progress.classList.add('hidden');
         status.textContent = '失败';
         status.className = 'text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600';
-        error.textContent = err.message;
+        if (err.name === 'AbortError') {
+          error.textContent = '请求超时（60秒）。Firecrawl 提取 YouTube 字幕较慢，建议切换到 Demo 硬编码模式。';
+        } else {
+          error.textContent = err.message;
+        }
         error.classList.remove('hidden');
       } finally {
         btn.disabled = false;

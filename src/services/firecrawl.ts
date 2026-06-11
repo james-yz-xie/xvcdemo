@@ -19,7 +19,7 @@ export async function fetchYoutubeTranscript(
       url: `https://www.youtube.com/watch?v=${videoId}`,
       formats: ["markdown"],
       onlyMainContent: false,
-      waitFor: 5000,
+      waitFor: 2000,
     }),
   });
 
