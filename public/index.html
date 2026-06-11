@@ -184,8 +184,9 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
     }
 
     async function extractSubtitles() {
-      console.log('extractSubtitles called');
+      console.log('=== extractSubtitles called ===');
       const url = document.getElementById('videoUrl').value.trim();
+      console.log('URL:', url);
       const btn = document.getElementById('extractBtn');
       const btnText = document.getElementById('extractBtnText');
       const spinner = document.getElementById('extractSpinner');
@@ -218,7 +219,7 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
       try {
         progressText.textContent = '正在请求视频页面...';
         const extractMode = document.getElementById('extractModelSelect').value;
-        console.log('Extract mode:', extractMode);
+        console.log('Extract mode:', extractMode, 'forceLive:', extractMode === 'live');
         const res = await fetch(API_BASE + '/api/subtitles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -226,7 +227,7 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
         });
         console.log('Response status:', res.status);
         const data = await res.json();
-        console.log('Response data:', data);
+        console.log('Response status:', res.status, 'data:', data);
 
         if (!res.ok) throw new Error(data.error || '字幕提取失败');
 
@@ -249,7 +250,7 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
         console.log('Extract success, showing generate section');
 
       } catch (err) {
-        console.error('Extract error:', err);
+        console.error('=== Extract error ===', err);
         progress.classList.add('hidden');
         status.textContent = '失败';
         status.className = 'text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600';
