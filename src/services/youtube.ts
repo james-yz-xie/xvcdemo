@@ -28,7 +28,11 @@ export interface SubtitleResult {
  *  Hard-coded transcripts are returned instantly (PRD recommendation).
  *  Falls back to live extraction only when no hard-coded data exists.
  */
-export async function fetchSubtitles(videoId: string, forceLive = false): Promise<SubtitleResult> {
+export async function fetchSubtitles(
+  videoId: string,
+  forceLive = false,
+  scraperApiKey?: string
+): Promise<SubtitleResult> {
   // 1. Return hard-coded immediately if available — zero latency
   if (!forceLive) {
     const fallback = getHardcodedSubtitles(videoId);
@@ -47,9 +51,9 @@ export async function fetchSubtitles(videoId: string, forceLive = false): Promis
     // fall through to proxy attempt
   }
 
-  // 3. Attempt via webshare.io proxy (PRD recommendation)
+  // 3. Attempt via ScraperAPI proxy
   try {
-    const live = await fetchLiveSubtitlesViaProxy(videoId);
+    const live = await fetchLiveSubtitlesViaProxy(videoId, scraperApiKey);
     if (live.trim().length >= 100) {
       return { text: live, source: "live" };
     }
@@ -82,7 +86,7 @@ async function fetchLiveSubtitles(videoId: string): Promise<string> {
   return extractAndParseSubtitles(html, false);
 }
 
-async function fetchLiveSubtitlesViaProxy(videoId: string): Promise<string> {
+async function fetchLiveSubtitlesViaProxy(videoId: string, apiKey?: string): Promise<string> {
   const pageRes = await fetchViaProxy(
     `https://www.youtube.com/watch?v=${videoId}`,
     {
@@ -93,7 +97,8 @@ async function fetchLiveSubtitlesViaProxy(videoId: string): Promise<string> {
           "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
-    }
+    },
+    apiKey
   );
 
   const html = await pageRes.text();
