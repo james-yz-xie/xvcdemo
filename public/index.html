@@ -119,7 +119,7 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
                 class="px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
                 <option value="gemini" selected>🌐 Gemini 2.0 Flash（云端）</option>
                 <option value="kimi">🌙 Kimi Code（Moonshot）</option>
-                <option value="lmstudio">💻 LM Studio（本地）</option>
+                <option value="lmstudio">💻 LM Studio（本地，推荐）</option>
               </select>
               <select id="generateModeSelect"
                 class="px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
@@ -133,6 +133,9 @@ window.DEMO_ARTICLE = ["对话安德森：AI革命的万亿美金之问","","技
                 <div id="generateSpinner" class="spinner hidden" style="width:14px;height:14px;border-width:1.5px;"></div>
               </button>
             </div>
+          </div>
+          <div class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-2">
+            💡 <strong>提示：</strong>Gemini 免费额度有限，如遇 429 错误请切换到 <strong>LM Studio（本地）</strong>或 <strong>Demo 模式</strong>。
           </div>
           <details class="group">
             <summary class="text-xs font-medium text-slate-500 cursor-pointer hover:text-slate-700 select-none list-none flex items-center gap-1">
